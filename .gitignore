@@ -1,1 +1,6 @@
-node_modules/\nwallets/\nconfig.json\n*.log\n*.bak
+agent/node_modules/
+agent/wallets/
+agent/config.json
+*.log
+*.bak
+.env
