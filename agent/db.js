@@ -18,7 +18,7 @@ async function getOrCreateUser(telegramId, firstName) {
   const created = await pool.query(
     `INSERT INTO users (telegram_id, first_name, region) 
      VALUES ($1, $2, $3) RETURNING *`,
-    [telegramId, firstName || null, 'GH']
+    [telegramId, firstName || null, null]
   );
   return created.rows[0];
 }
