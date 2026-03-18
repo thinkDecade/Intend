@@ -1,6 +1,13 @@
+# Dependencies
 agent/node_modules/
-agent/wallets/
-agent/config.json
+node_modules/
+
+# Wallets & sensitive data
+wallets/
+config.json
 *.log
 *.bak
 .env
+
+# OS
+.DS_Store
