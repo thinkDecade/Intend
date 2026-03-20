@@ -1,213 +1,163 @@
+#!/usr/bin/env node
 /**
- * INTEND EXECUTION ENGINE v2.1
- * Handles HEDGE, YIELD, TRANSFER via Tether WDK.
- * Called by bot.js when user taps [ Activate ].
+ * INTEND EXECUTION ENGINE v3.0
+ * Direct WDK module calls. No openclaw.skill() wrapper.
+ * Called by agent via: node executor.js <action_json>
  */
+'use strict';
 
-const { Pool } = require('pg');
-const fs       = require('fs');
-const path     = require('path');
-const cfg      = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+const { WalletAccountEvm } = require('@tetherto/wdk-wallet-evm');
+const db = require('./db');
+const { decrypt, isEncrypted } = require('./crypto');
+const fs = require('fs');
+const path = require('path');
 
-const db = new Pool({
-  host:     cfg.DB_HOST     || 'localhost',
-  port:     5432,
-  database: cfg.DB_NAME     || 'intend',
-  user:     cfg.DB_USER     || 'intend_user',
-  password: cfg.DB_PASSWORD || 'intend_pass_2026',
-});
+// Token addresses
+const TOKENS = {
+  USDT: {
+    arbitrum:  '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+    ethereum:  '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    celo:      '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e',
+  }
+};
+
+const RPC = {
+  arbitrum:  'https://arb1.arbitrum.io/rpc',
+  ethereum:  'https://ethereum-rpc.publicnode.com',
+  celo:      'https://forno.celo.org',
+  base:      'https://mainnet.base.org',
+};
+
+const WALLET_DIR = path.join(process.env.HOME, '.openclaw/workspace/wallets');
+
+async function getEvmAccount(telegramId, chain = 'arbitrum') {
+  const backupPath = path.join(WALLET_DIR, `${telegramId}.json`);
+  if (!fs.existsSync(backupPath)) throw new Error('Wallet not found for user ' + telegramId);
+  const data = JSON.parse(fs.readFileSync(backupPath));
+  const encMnemonic = data.mnemonic;
+  if (!encMnemonic) throw new Error('No mnemonic found');
+  const mnemonic = isEncrypted(encMnemonic) ? decrypt(encMnemonic) : encMnemonic;
+  return new WalletAccountEvm(mnemonic, "0'/0/0", { provider: RPC[chain] || RPC.arbitrum });
+}
 
 async function logEvent(userId, type, payload) {
   try {
-    await db.query(
+    await db.pool.query(
       'INSERT INTO events (user_id, type, payload) VALUES ($1, $2, $3)',
       [userId, type, JSON.stringify(payload)]
     );
   } catch(e) { console.error('[executor] logEvent failed:', e.message); }
 }
 
-async function updateIntention(intentionId, status, txHash = null) {
+async function savePosition(userId, objective, asset, amount, protocol, chain, apy) {
   try {
-    await db.query(
-      `UPDATE intentions SET status=$1, tx_hash=$2, completed_at=NOW() WHERE id=$3`,
-      [status, txHash, intentionId]
-    );
-  } catch(e) { console.error('[executor] updateIntention failed:', e.message); }
-}
-
-async function savePosition(userId, objective, asset, amount, protocol, chain, apy = null) {
-  try {
-    const r = await db.query(
+    const r = await db.pool.query(
       `INSERT INTO positions (user_id, objective, asset, amount, protocol, chain, apy_at_entry, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'active') RETURNING id`,
-      [userId, objective, asset, amount, protocol, chain, apy]
+      [userId, objective, asset, amount, protocol, chain, apy || null]
     );
     return r.rows[0]?.id;
   } catch(e) { console.error('[executor] savePosition failed:', e.message); return null; }
 }
 
-async function execute(userId, intentionId, action, openclaw) {
-  console.log(`[executor] ${action.type} for user ${userId}`);
-  await updateIntention(intentionId, 'executing');
+function toUnits(amount, decimals = 6) {
+  return BigInt(Math.round(parseFloat(amount) * 10 ** decimals));
+}
+
+async function executeYield(userId, amount, chain = 'arbitrum', apy) {
+  const AaveProtocolEvm = require('@tetherto/wdk-protocol-lending-aave-evm').default;
+  const account = await getEvmAccount(userId, chain);
+  try {
+    const aave = new AaveProtocolEvm(account);
+    const tokenAddress = TOKENS.USDT[chain];
+    if (!tokenAddress) throw new Error(`No USDT address for chain: ${chain}`);
+    const amountBig = toUnits(amount);
+    const result = await aave.supply({ token: tokenAddress, amount: amountBig });
+    const txHash = result?.hash || result?.txHash || 'pending';
+    await savePosition(userId, 'YIELD', 'USDT', amount, 'aave-v3', chain, apy);
+    await logEvent(userId, 'yield_deployed', { amount, chain, apy, txHash });
+    return { success: true, txHash, message: `✅ *${amount} USDT deployed at ${apy || '?'}% APY.*\n\nYour money is working.` };
+  } finally {
+    account.dispose();
+  }
+}
+
+async function executeHedge(userId, amount, chain = 'arbitrum') {
+  const account = await getEvmAccount(userId, chain);
+  try {
+    // HEDGE = hold in USDT (already stable). Log the intention.
+    const txHash = 'hold_' + Date.now();
+    await savePosition(userId, 'HEDGE', 'USDT', amount, 'self-custody', chain, null);
+    await logEvent(userId, 'hedge_activated', { amount, chain, txHash });
+    return { success: true, txHash, message: `✅ *${amount} USDT secured.*\n\nPurchasing power protected.` };
+  } finally {
+    account.dispose();
+  }
+}
+
+async function executeTransfer(userId, amount, recipientAddress, chain = 'celo') {
+  const account = await getEvmAccount(userId, chain);
+  try {
+    const tokenAddress = TOKENS.USDT[chain];
+    if (!tokenAddress) throw new Error(`No USDT address for chain: ${chain}`);
+    const amountBig = toUnits(amount);
+    const result = await account.transfer({ token: tokenAddress, to: recipientAddress, amount: amountBig });
+    const txHash = result?.hash || result?.txHash || 'pending';
+    await logEvent(userId, 'transfer_executed', { amount, chain, recipientAddress, txHash });
+    return { success: true, txHash, message: `✅ *${amount} USDT sent.*\n\nTransaction: \`${txHash}\`` };
+  } finally {
+    account.dispose();
+  }
+}
+
+async function getBalance(userId, chain = 'arbitrum') {
+  const account = await getEvmAccount(userId, chain);
+  try {
+    const tokenAddress = TOKENS.USDT[chain];
+    if (!tokenAddress) throw new Error(`No USDT address for chain: ${chain}`);
+    const balance = await account.getBalance({ token: tokenAddress });
+    const readable = (Number(balance) / 1e6).toFixed(2);
+    return { success: true, balance: readable, chain };
+  } finally {
+    account.dispose();
+  }
+}
+
+async function main() {
+  const cmd = process.argv[2];
+  const arg = process.argv[3];
+
+  if (!cmd) {
+    console.error('Usage: node executor.js <yield|hedge|transfer|balance> <json_params>');
+    process.exit(1);
+  }
+
+  const params = arg ? JSON.parse(arg) : {};
 
   try {
     let result;
-
-    switch (action.type) {
-
-      // ── HEDGE — Protect purchasing power
-      case 'hedge': {
-        const { mode = 'protect', amount, fromAsset = 'USDT', chain = 'base', apy, safeChain = 'celo' } = action;
-
-        if (mode === 'exit') {
-          // Emergency: withdraw all YIELD positions to USDT
-          const positions = await db.query(
-            `SELECT * FROM positions WHERE user_id=$1 AND status='active' AND objective='YIELD'`,
-            [userId]
-          );
-          let totalWithdrawn = 0;
-          const txHashes = [];
-          for (const pos of positions.rows) {
-            result = await openclaw.skill('wdk-agent-skills', 'aave_withdraw', {
-              asset: pos.asset, amount: String(pos.amount), chain: pos.chain,
-            });
-            if (result?.success) {
-              totalWithdrawn += pos.amount;
-              txHashes.push(result?.tx_hash || 'pending');
-              await db.query(`UPDATE positions SET status='hedged' WHERE id=$1`, [pos.id]);
-            }
-          }
-          if (totalWithdrawn > 0) {
-            result = await openclaw.skill('wdk-agent-skills', 'usdt0_bridge', {
-              from_chain: 'base', to_chain: safeChain, amount: String(totalWithdrawn),
-            });
-            if (result?.success) txHashes.push(result?.tx_hash || 'pending');
-          }
-          await updateIntention(intentionId, 'complete', txHashes[0] || 'pending');
-          await logEvent(userId, 'hedge_exit', { totalWithdrawn, safeChain, txHashes });
-          return {
-            success: true,
-            message: `✅ HEDGE complete. ${totalWithdrawn} USDT withdrawn to safety on ${safeChain}.`,
-            txHash: txHashes[0] || 'pending', fee: '~$0.05',
-          };
-
-        } else {
-          // Protect mode: swap to USDT if needed, then deploy to yield
-          if (fromAsset !== 'USDT') {
-            result = await openclaw.skill('wdk-agent-skills', 'velora_swap', {
-              from_token: fromAsset, to_token: 'USDT', amount: String(amount), chain,
-            });
-            if (!result?.success) throw new Error(`Swap failed: ${result?.error}`);
-          }
-          if (apy && amount) {
-            result = await openclaw.skill('wdk-agent-skills', 'aave_deposit', {
-              asset: 'USDT', amount: String(amount), chain,
-            });
-            if (!result?.success) throw new Error(`Deposit failed: ${result?.error}`);
-          }
-          const txHash = result?.tx_hash || result?.txHash || 'pending';
-          await savePosition(userId, 'HEDGE', 'USDT', amount, 'aave-v3', chain, apy);
-          await updateIntention(intentionId, 'complete', txHash);
-          await logEvent(userId, 'hedge_protect', { amount, chain, apy, txHash });
-          return {
-            success: true,
-            message: `✅ HEDGE active. ${amount} USDT protected${apy ? ` at ${apy}% APY` : ''}.`,
-            txHash, fee: result?.fee || '~$0.02',
-          };
-        }
-      }
-
-      // ── YIELD — Deploy idle capital
-      case 'yield': {
-        const { amount, protocol = 'aave-v3', chain = 'base', apy } = action;
-        result = await openclaw.skill('wdk-agent-skills', 'aave_deposit', {
-          asset: 'USDT', amount: String(amount), chain,
-        });
-        if (!result?.success) throw new Error(`Deposit failed: ${result?.error}`);
-        const txHash = result?.tx_hash || result?.txHash || 'pending';
-        await savePosition(userId, 'YIELD', 'USDT', amount, protocol, chain, apy);
-        await updateIntention(intentionId, 'complete', txHash);
-        await logEvent(userId, 'yield_deployed', { amount, protocol, chain, apy, txHash });
-        return {
-          success: true,
-          message: `✅ ${amount} USDT deployed at ${apy || '?'}% APY.`,
-          txHash, fee: result?.fee || '~$0.02',
-        };
-      }
-
-      // ── TRANSFER — Cross-border to local currency
-      case 'transfer': {
-        const { amount, recipientPhone, recipientCountry = 'NG', recipientBank } = action;
-        // Bridge to Celo (only chain with Fonbnk)
-        result = await openclaw.skill('wdk-agent-skills', 'usdt0_bridge', {
-          from_chain: 'base', to_chain: 'celo', amount: String(amount),
-        });
-        if (!result?.success) throw new Error(`Bridge failed: ${result?.error}`);
-        // Fonbnk offramp
-        const fonbnkResult = await triggerFonbnkOfframp({
-          amount, currency: COUNTRY_CURRENCY[recipientCountry] || 'NGN',
-          phone: recipientPhone, bank: recipientBank,
-        });
-        const txHash = fonbnkResult?.orderId || result?.tx_hash || 'pending';
-        await updateIntention(intentionId, 'complete', txHash);
-        await logEvent(userId, 'transfer_executed', { amount, recipientCountry, recipientPhone, txHash });
-        return {
-          success: true,
-          message: `✅ Transfer complete. ${fonbnkResult?.localAmount || amount + ' USDT'} delivered to ${recipientPhone}.`,
-          txHash, fee: `~${(amount * 0.015).toFixed(2)} USDT`,
-        };
-      }
-
-      // ── ONRAMP — Buy crypto via MoonPay
-      case 'onramp': {
-        const { amount, currency = 'USD' } = action;
-        result = await openclaw.skill('wdk-agent-skills', 'moonpay_onramp', {
-          fiat_amount: String(amount), fiat_currency: currency, crypto_currency: 'USDT',
-        });
-        if (!result?.success) throw new Error(`MoonPay failed: ${result?.error}`);
-        const txHash = result?.tx_hash || 'pending';
-        await updateIntention(intentionId, 'complete', txHash);
-        await logEvent(userId, 'onramp_executed', { amount, currency, txHash });
-        return {
-          success: true,
-          message: `✅ Onramp initiated. ${amount} ${currency} → USDT. Check your wallet in ~5 minutes.`,
-          txHash, fee: `~${(amount * 0.025 + 3.99).toFixed(2)} ${currency}`,
-          moonpayUrl: result?.url,
-        };
-      }
-
+    switch(cmd) {
+      case 'yield':
+        result = await executeYield(params.userId, params.amount, params.chain || 'arbitrum', params.apy);
+        break;
+      case 'hedge':
+        result = await executeHedge(params.userId, params.amount, params.chain || 'arbitrum');
+        break;
+      case 'transfer':
+        result = await executeTransfer(params.userId, params.amount, params.recipientAddress, params.chain || 'celo');
+        break;
+      case 'balance':
+        result = await getBalance(params.userId, params.chain || 'arbitrum');
+        break;
       default:
-        throw new Error(`Unknown action type: ${action.type}`);
+        throw new Error('Unknown command: ' + cmd);
     }
-
-  } catch(err) {
-    console.error('[executor] Failed:', err.message);
-    await updateIntention(intentionId, 'failed');
-    await logEvent(userId, 'execution_failed', { action, error: err.message });
-    return { success: false, message: `❌ Execution failed: ${err.message}` };
+    console.log(JSON.stringify(result, (k,v) => typeof v === "bigint" ? v.toString() : v));
+    process.exit(0);
+  } catch(e) {
+    console.log(JSON.stringify({ success: false, message: '❌ ' + e.message }));
+    process.exit(1);
   }
 }
 
-const COUNTRY_CURRENCY = { NG:'NGN', KE:'KES', GH:'GHS', ZA:'ZAR' };
-
-async function triggerFonbnkOfframp({ amount, currency, phone, bank }) {
-  const FONBNK_API_KEY = cfg.FONBNK_API_KEY;
-  if (!FONBNK_API_KEY) {
-    const rates = { NGN:1660, KES:130, GHS:15.5, ZAR:19 };
-    console.warn('[executor] FONBNK_API_KEY not set — mock mode');
-    return {
-      orderId: 'mock_' + Date.now(),
-      localAmount: `${currency} ${Math.round(amount * (rates[currency]||1)).toLocaleString()}`,
-      status: 'mock',
-    };
-  }
-  const r = await fetch('https://api.fonbnk.com/v1/offramp/order', {
-    method: 'POST',
-    headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${FONBNK_API_KEY}` },
-    body: JSON.stringify({ amount, currency, phone, bank: bank || null }),
-  });
-  if (!r.ok) throw new Error(`Fonbnk HTTP ${r.status}`);
-  return await r.json();
-}
-
-module.exports = { execute, logEvent };
+main().catch(e => { console.error(e.message); process.exit(1); });

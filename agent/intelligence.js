@@ -105,7 +105,11 @@ async function fetchYields() {
       Object.keys(CHAINS).includes(p.chain) &&
       ['USDT','USDC'].some(s => (p.symbol||'').toUpperCase().includes(s)) &&
       (p.tvlUsd||0) >= 10_000_000 &&
-      (p.apy||0) > 0 && (p.apy||0) < 80
+      (p.apy||0) > 0 && (p.apy||0) < 30 &&
+      !['uniswap', 'curve', 'balancer', 'velodrome', 'aerodrome', 'camelot'].includes((p.project||'').toLowerCase()) &&
+      !(p.symbol||'').toUpperCase().includes('WETH') &&
+      !(p.symbol||'').toUpperCase().includes('WBTC') &&
+      !(p.symbol||'').toUpperCase().includes('-')
     )
     .sort((a,b) => (b.apy||0) - (a.apy||0))
     .slice(0, 6)
@@ -117,18 +121,38 @@ async function fetchYields() {
 
 async function fetchPolymarketRisk() {
   const data = await fetchJSON(
-    'https://gamma-api.polymarket.com/markets?tag=politics&closed=false&limit=20',
+    'https://gamma-api.polymarket.com/markets?tag=politics&closed=false&limit=50',
     'Polymarket'
   );
   if (!Array.isArray(data)) return { score: 0, events: [] };
-  const significant = data.filter(m => m.volume > 50000).slice(0, 5).map(m => ({
-    title: (m.question || m.title || '').slice(0, 70),
-    volume: Math.round(m.volume || 0),
-  }));
+  const JUNK_KEYWORDS = ['gta', 'rihanna', 'carti', 'jesus', 'christ', 'album', 'movie', 'nba', 'nfl', 'oscar', 'grammy', 'celebrity', 'playboi', 'bitboy'];
+  const significant = data
+    .filter(m => m.volume > 200000)
+    .filter(m => {
+      const title = (m.question || m.title || '').toLowerCase();
+      return !JUNK_KEYWORDS.some(k => title.includes(k));
+    })
+    .slice(0, 5)
+    .map(m => ({
+      title: (m.question || m.title || '').slice(0, 70),
+      volume: Math.round(m.volume || 0),
+    }));
   const score = significant.length
     ? Math.round(significant.reduce((s,e) => s + e.volume, 0) / significant.length / 10000)
     : 0;
   return { score: Math.min(score, 100), events: significant };
+}
+
+
+async function fetchFxRates() {
+  const data = await fetchJSON('https://open.er-api.com/v6/latest/USD', 'FX rates');
+  if (!data?.rates) return { GHS: 10.94, NGN: 1358, KES: 129, ZAR: 16.8 };
+  return {
+    GHS: Number(data.rates.GHS?.toFixed(4)) || 10.94,
+    NGN: Number(data.rates.NGN?.toFixed(2)) || 1358,
+    KES: Number(data.rates.KES?.toFixed(2)) || 129,
+    ZAR: Number(data.rates.ZAR?.toFixed(4)) || 16.8,
+  };
 }
 
 async function fetchAaveTVL() {
@@ -144,8 +168,8 @@ async function buildContext() {
   console.log('[intel] Fetching signals...');
   const now = new Date().toUTCString();
 
-  const [yields, polymarket, aaveTvl, chainTVLs, gasPrices] = await Promise.all([
-    fetchYields(), fetchPolymarketRisk(), fetchAaveTVL(), fetchChainTVLs(), fetchGasPrices(),
+  const [yields, polymarket, aaveTvl, chainTVLs, gasPrices, fxRates] = await Promise.all([
+    fetchYields(), fetchPolymarketRisk(), fetchAaveTVL(), fetchChainTVLs(), fetchGasPrices(), fetchFxRates(),
   ]);
 
   const highInflation = Object.values(INFLATION).filter(c => c.rate >= HEDGE_THRESHOLD);
@@ -206,6 +230,12 @@ async function buildContext() {
     `- Standard ($100-$2k):       ${bestGeneral}`,
     `- Large (>$2k):              ${bestLarge}`,
     `- Africa offramp (any size): ${bestAfrica} → Fonbnk`,
+    ``,
+    `## FX RATES (live)`,
+    `- 1 USD = GHS ${fxRates.GHS}`,
+    `- 1 USD = NGN ${fxRates.NGN}`,
+    `- 1 USD = KES ${fxRates.KES}`,
+    `- 1 USD = ZAR ${fxRates.ZAR}`,
     ``,
     `## FEE ESTIMATES`,
     ...Object.entries(gasPrices).map(([chain, fee]) =>

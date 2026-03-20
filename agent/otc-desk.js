@@ -3,12 +3,12 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const db = require('./db');
 
 const USER_BOT_TOKEN = '8689838168:AAHsxKsbvQQ8hhpTtULdt7SCqSxK2TAL5vw';
 const DESK_BOT_TOKEN = '8765104347:AAH-8Jlc90G2grv0Wyln6LeoWohpln7W5Uo';
 const TRADE_DESK_GROUP = '-1003883356232';
-const ORDERS_FILE = path.join(process.env.HOME, 'intend/orders.json');
-const db = require('./db');
+const ORDERS_FILE = path.join(process.env.HOME, 'intend/agent/orders.json');
 
 function loadOrders() {
   try { return JSON.parse(fs.readFileSync(ORDERS_FILE)); }
@@ -67,21 +67,21 @@ async function createOrder(userId, type, amountUsd, walletAddress, momoNumber) {
   db.saveOrder(orders[orderId]).catch(e => console.error('[db] saveOrder:', e.message));
 
   await sendDesk(
-    `🔔 *New ${type.toUpperCase()} Order*\n\n` +
-    `Order: \`${orderId}\`\n` +
-    `Type: ${type === 'buy' ? '🟢 User buying USDT (we receive GHS)' : '🔴 User selling USDT (we send GHS)'}\n` +
-    `Amount: $${amountUsd} USDT\n` +
-    `Wallet: \`${walletAddress}\`\n` +
-    (momoNumber ? `MoMo: ${momoNumber}\n` : '') +
-    `\nSet rate: \`/quote ${orderId} <GHS per USD>\`\n` +
-    `Example: \`/quote ${orderId} 15.20\``
+    '🔔 *New ' + type.toUpperCase() + ' Order*\n\n' +
+    'Order: `' + orderId + '`\n' +
+    'Type: ' + (type === 'buy' ? '🟢 User buying USDT (we receive GHS)' : '🔴 User selling USDT (we send GHS)') + '\n' +
+    'Amount: $' + amountUsd + ' USDT\n' +
+    'Wallet: `' + walletAddress + '`\n' +
+    (momoNumber ? 'MoMo: ' + momoNumber + '\n' : '') +
+    '\nSet rate: `/quote ' + orderId + ' <GHS per USD>`\n' +
+    'Example: `/quote ' + orderId + ' 15.20`'
   );
 
   await sendUser(userId,
-    `⏳ *Order Received*\n\n` +
-    `Order ID: \`${orderId}\`\n` +
-    `Amount: $${amountUsd} USDT\n\n` +
-    `Our trade desk is preparing your quote. Usually under 5 minutes.`
+    '⏳ *Order Received*\n\n' +
+    'Order ID: `' + orderId + '`\n' +
+    'Amount: $' + amountUsd + ' USDT\n\n' +
+    'Your quote is being prepared. Usually under 5 minutes.'
   );
 
   return orderId;
@@ -94,11 +94,11 @@ async function handlePaid(orderId) {
   order.status = 'payment_claimed';
   saveOrders(orders);
   await sendDesk(
-    `💰 *Payment Claimed*\n\n` +
-    `Order: \`${orderId}\`\n` +
-    `User says GHS ${order.amountGhs} sent via MoMo.\n` +
-    `Verify and confirm: \`/confirm ${orderId}\`\n` +
-    `Or cancel: \`/cancel ${orderId}\``
+    '💰 *Payment Claimed*\n\n' +
+    'Order: `' + orderId + '`\n' +
+    'User says GHS ' + order.amountGhs + ' sent via MoMo.\n' +
+    'Verify and confirm: `/confirm ' + orderId + '`\n' +
+    'Or cancel: `/cancel ' + orderId + '`'
   );
   console.log('Trade desk notified');
 }
@@ -110,11 +110,11 @@ async function handleSent(orderId) {
   order.status = 'usdt_claimed';
   saveOrders(orders);
   await sendDesk(
-    `🔄 *USDT Sent Claimed*\n\n` +
-    `Order: \`${orderId}\`\n` +
-    `User says $${order.amountUsd} USDT sent.\n` +
-    `Verify on-chain, then send GHS ${order.amountGhs} to MoMo: ${order.momoNumber}.\n` +
-    `Confirm when done: \`/confirm ${orderId}\``
+    '🔄 *USDT Sent Claimed*\n\n' +
+    'Order: `' + orderId + '`\n' +
+    'User says $' + order.amountUsd + ' USDT sent.\n' +
+    'Verify on-chain, then send GHS ' + order.amountGhs + ' to MoMo: ' + order.momoNumber + '.\n' +
+    'Confirm when done: `/confirm ' + orderId + '`'
   );
   console.log('Trade desk notified');
 }
@@ -127,8 +127,8 @@ async function handleDeskCommand(text) {
     const orderId = parts[1];
     const rate = parseFloat(parts[2]);
     const order = orders[orderId];
-    if (!order) return sendDesk(`❌ Order ${orderId} not found.`);
-    if (isNaN(rate)) return sendDesk(`❌ Invalid rate. Example: /quote ${orderId} 15.20`);
+    if (!order) return sendDesk('❌ Order ' + orderId + ' not found.');
+    if (isNaN(rate)) return sendDesk('❌ Invalid rate. Example: /quote ' + orderId + ' 15.20');
     const amountGhs = (order.amountUsd * rate).toFixed(2);
     order.rate = rate;
     order.amountGhs = amountGhs;
@@ -136,73 +136,73 @@ async function handleDeskCommand(text) {
     saveOrders(orders);
     if (order.type === 'buy') {
       await sendUser(order.userId,
-        `💱 *Your Quote is Ready*\n\n` +
-        `Order: \`${orderId}\`\n` +
-        `You send: *GHS ${amountGhs}*\n` +
-        `You receive: *$${order.amountUsd} USDT*\n` +
-        `Rate: 1 USD = GHS ${rate}\n\n` +
-        `Send GHS ${amountGhs} via Mobile Money to:\n` +
-        `📱 *MTN MoMo: 024 351 9953* (Ideasflip Enterprise)\n\n` +
-        `Once sent, reply: \`/paid ${orderId}\``
+        '💱 *Your Quote is Ready*\n\n' +
+        'Order: `' + orderId + '`\n' +
+        'You send: *GHS ' + amountGhs + '*\n' +
+        'You receive: *$' + order.amountUsd + ' USDT*\n' +
+        'Rate: 1 USD = GHS ' + rate + '\n\n' +
+        'Send GHS ' + amountGhs + ' via Mobile Money to:\n' +
+        '📱 *MTN MoMo: 024 351 9953* (Ideasflip Enterprise)\n\n' +
+        'Once sent, reply: `/paid ' + orderId + '`'
       );
     } else {
       await sendUser(order.userId,
-        `💱 *Your Quote is Ready*\n\n` +
-        `Order: \`${orderId}\`\n` +
-        `You send: *$${order.amountUsd} USDT*\n` +
-        `You receive: *GHS ${amountGhs}*\n` +
-        `Rate: 1 USD = GHS ${rate}\n\n` +
-        `Send USDT to this address on Arbitrum:\n` +
-        `\`${order.walletAddress}\`\n\n` +
-        `Once sent, reply: \`/sent ${orderId}\``
+        '💱 *Your Quote is Ready*\n\n' +
+        'Order: `' + orderId + '`\n' +
+        'You send: *$' + order.amountUsd + ' USDT*\n' +
+        'You receive: *GHS ' + amountGhs + '*\n' +
+        'Rate: 1 USD = GHS ' + rate + '\n\n' +
+        'Send USDT to your Intend wallet:\n' +
+        '`' + order.walletAddress + '`\n\n' +
+        'Once sent, reply: `/sent ' + orderId + '`'
       );
     }
-    await sendDesk(`✅ Quote sent for ${orderId} at GHS ${rate}/USD`);
+    await sendDesk('✅ Quote sent for ' + orderId + ' at GHS ' + rate + '/USD');
   }
 
   else if (text.startsWith('/confirm ')) {
     const orderId = text.split(' ')[1];
     const order = orders[orderId];
-    if (!order) return sendDesk(`❌ Order ${orderId} not found.`);
+    if (!order) return sendDesk('❌ Order ' + orderId + ' not found.');
     order.status = 'complete';
     order.completedAt = new Date().toISOString();
     saveOrders(orders);
     if (order.type === 'buy') {
       await sendUser(order.userId,
-        `✅ *Payment Confirmed*\n\n` +
-        `Order: \`${orderId}\`\n` +
-        `$${order.amountUsd} USDT is being released to your wallet.\n` +
-        `Wallet: \`${order.walletAddress}\`\n\n` +
-        `Funds will arrive within minutes.`
+        '✅ *Payment Confirmed*\n\n' +
+        'Order: `' + orderId + '`\n' +
+        '$' + order.amountUsd + ' USDT is being released to your wallet.\n' +
+        'Wallet: `' + order.walletAddress + '`\n\n' +
+        'Funds will arrive within minutes.'
       );
     } else {
       await sendUser(order.userId,
-        `✅ *Order Complete*\n\n` +
-        `Order: \`${orderId}\`\n` +
-        `GHS ${order.amountGhs} has been sent to your Mobile Money.\n\n` +
-        `Thank you for using Intend.`
+        '✅ *Order Complete*\n\n' +
+        'Order: `' + orderId + '`\n' +
+        'GHS ' + order.amountGhs + ' has been sent to your Mobile Money.\n\n' +
+        'Thank you for using Intend.'
       );
     }
-    await sendDesk(`✅ Order ${orderId} marked complete.`);
+    await sendDesk('✅ Order ' + orderId + ' marked complete.');
   }
 
   else if (text.startsWith('/cancel ')) {
     const orderId = text.split(' ')[1];
     const order = orders[orderId];
-    if (!order) return sendDesk(`❌ Order ${orderId} not found.`);
+    if (!order) return sendDesk('❌ Order ' + orderId + ' not found.');
     order.status = 'cancelled';
     saveOrders(orders);
     await sendUser(order.userId,
-      `❌ *Order Cancelled*\n\nOrder \`${orderId}\` has been cancelled.\nReply "buy USDT" or "sell USDT" to start a new order.`
+      '❌ *Order Cancelled*\n\nOrder `' + orderId + '` has been cancelled.\nReply with how much you want to load to start a new order.'
     );
-    await sendDesk(`Order ${orderId} cancelled.`);
+    await sendDesk('Order ' + orderId + ' cancelled.');
   }
 
   else if (text === '/orders') {
     const active = Object.values(orders).filter(o => o.status !== 'complete' && o.status !== 'cancelled');
     if (active.length === 0) return sendDesk('No active orders.');
-    const list = active.map(o => `• \`${o.orderId}\` | ${o.type.toUpperCase()} $${o.amountUsd} | ${o.status}`).join('\n');
-    await sendDesk(`*Active Orders (${active.length}):*\n\n${list}`);
+    const list = active.map(o => '• `' + o.orderId + '` | ' + o.type.toUpperCase() + ' $' + o.amountUsd + ' | ' + o.status).join('\n');
+    await sendDesk('*Active Orders (' + active.length + '):*\n\n' + list);
   }
 }
 
@@ -220,13 +220,31 @@ async function pollDeskBot() {
   } catch (e) { console.error('[desk-bot]', e.message); }
 }
 
+
+async function getOrderStatus(telegramId) {
+  const orders = loadOrders();
+  const userOrders = Object.values(orders).filter(o => o.userId === String(telegramId));
+  if (userOrders.length === 0) {
+    console.log(JSON.stringify({ hasOrders: false }));
+    return;
+  }
+  const active = userOrders.filter(o => !["complete","cancelled"].includes(o.status));
+  const recent = userOrders.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,3);
+  console.log(JSON.stringify({ hasOrders: true, activeOrders: active, recentOrders: recent }));
+}
+
 async function main() {
   const cmd = process.argv[2];
 
   if (cmd === 'create') {
     const [,, , userId, type, amountUsd, walletAddress, momoNumber] = process.argv;
     await createOrder(userId, type, parseFloat(amountUsd), walletAddress, momoNumber);
-    console.log('Order created');
+    console.log('[otc-desk] Order created');
+    process.exit(0);
+  }
+
+  if (cmd === 'status') {
+    await getOrderStatus(process.argv[3]);
     process.exit(0);
   }
 
