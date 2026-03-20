@@ -78,15 +78,32 @@ async function createWallet(telegramId, name, region, automationLevel) {
     createdAt: new Date().toISOString()
   }, null, 2));
 
-  // Auto-fund on testnet (sandbox mode)
+  // Auto-fund on testnet (sandbox mode) — wait for on-chain confirmation
   if (process.env.INTEND_TESTNET === 'true' && process.env.INTEND_FAUCET_KEY) {
     try {
       const { execSync } = require('child_process');
+      console.log('[onboarding] Funding sandbox wallet...');
       execSync(`node ${__dirname}/faucet.js ${evmAddress} ${process.env.INTEND_FAUCET_KEY}`, {
-        timeout: 60000,
+        timeout: 120000,
         stdio: 'pipe'
       });
-      console.log('[onboarding] Sandbox tokens sent to', evmAddress);
+
+      // Poll until balance confirms on-chain (max 60s)
+      const { ethers } = require('ethers');
+      const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'testnet-config.json')));
+      const iUSDTAddress = config['ethereum-sepolia']?.iUSDT;
+      const provider = new ethers.JsonRpcProvider('https://ethereum-sepolia-rpc.publicnode.com');
+      const balAbi = ['function balanceOf(address) view returns (uint256)'];
+      const token = new ethers.Contract(iUSDTAddress, balAbi, provider);
+
+      let confirmed = false;
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const bal = await token.balanceOf(evmAddress);
+        if (BigInt(bal) > 0n) { confirmed = true; break; }
+        console.log('[onboarding] Waiting for balance confirmation... attempt', i + 1);
+      }
+      console.log('[onboarding] Sandbox funded:', confirmed ? 'confirmed' : 'timeout — tokens may be pending');
     } catch(e) { console.error('[onboarding] Faucet failed:', e.message); }
   }
 
