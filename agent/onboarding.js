@@ -78,7 +78,19 @@ async function createWallet(telegramId, name, region, automationLevel) {
     createdAt: new Date().toISOString()
   }, null, 2));
 
-  return { evmAddress, btcAddress, existed: false };
+  // Auto-fund on testnet (sandbox mode)
+  if (process.env.INTEND_TESTNET === 'true' && process.env.INTEND_FAUCET_KEY) {
+    try {
+      const { execSync } = require('child_process');
+      execSync(`node ${__dirname}/faucet.js ${evmAddress} ${process.env.INTEND_FAUCET_KEY}`, {
+        timeout: 60000,
+        stdio: 'pipe'
+      });
+      console.log('[onboarding] Sandbox tokens sent to', evmAddress);
+    } catch(e) { console.error('[onboarding] Faucet failed:', e.message); }
+  }
+
+  return { evmAddress, btcAddress, existed: false, sandboxFunded: process.env.INTEND_TESTNET === 'true' };
 }
 
 async function getWallet(telegramId) {

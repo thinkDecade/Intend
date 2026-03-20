@@ -17,12 +17,21 @@ const TOKENS = {
   USDT: {
     arbitrum:  '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
     ethereum:  '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-    celo:      '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e',
   },
   // Testnet iUSDT (Intend Test USDT)
   iUSDT: {
     'arbitrum-sepolia': '0xe24De1f763fAf5d2cFB54147AAd14Fe538999958',
     'ethereum-sepolia': '0x993034D6f6D942AA5491FaC8F1071d60D7b34107',
+  },
+  // Testnet iXAUT (Intend Test Gold — represents Tether Gold XAUT)
+  iXAUT: {
+    'arbitrum-sepolia': '0x993034D6f6D942AA5491FaC8F1071d60D7b34107',
+    'ethereum-sepolia': '0x9fDCf3e51299eE502F369010ecf79a9683057351',
+  },
+  // Mainnet XAUT (Tether Gold)
+  XAUT: {
+    ethereum: '0x68749665FF8D2d112Fa859AA293F07A622782F38',
+    arbitrum: '0xfB9701e0CA0E8e8Cc7B5b04Cd0FD4F27E3b5Fd1C',
   }
 };
 
@@ -49,9 +58,9 @@ const RPC = {
 
 function getChain(chain) {
   if (TESTNET) {
-    // Aave V3 only on Ethereum Sepolia — route all yield chains there
     if (chain === 'arbitrum') return 'ethereum-sepolia';
     if (chain === 'ethereum') return 'ethereum-sepolia';
+
   }
   return chain;
 }
@@ -152,18 +161,29 @@ async function executeHedge(userId, amount, chain = 'arbitrum') {
 }
 
 async function executeTransfer(userId, amount, recipientAddress, chain = 'celo') {
-  const account = await getEvmAccount(userId, chain);
   try {
-    const tokenAddress = TOKENS.USDT[chain];
-    if (!tokenAddress) throw new Error(`No USDT address for chain: ${chain}`);
+    if (!recipientAddress) throw new Error('Recipient address is required');
+    const { ethers } = require('ethers');
+    const resolvedChain = getChain(chain);
+    const rpc = RPC[resolvedChain] || RPC[chain];
+    if (!rpc) throw new Error(`No RPC for chain: ${chain}`);
+    const tokenAddress = getTokenAddress(chain);
+    if (!tokenAddress) throw new Error(`No token address for chain: ${chain}`);
+    const backupPath = require('path').join(WALLET_DIR, `${userId}.json`);
+    const data = JSON.parse(require('fs').readFileSync(backupPath));
+    const mnemonic = isEncrypted(data.mnemonic) ? decrypt(data.mnemonic) : data.mnemonic;
+    const provider = new ethers.JsonRpcProvider(rpc);
+    const wallet = ethers.Wallet.fromPhrase(mnemonic).connect(provider);
     const amountBig = toUnits(amount);
-    const result = await account.transfer({ token: tokenAddress, to: recipientAddress, amount: amountBig });
-    const txHash = result?.hash || result?.txHash || 'pending';
+    const erc20 = new ethers.Contract(tokenAddress, [
+      'function transfer(address to, uint256 amount) returns (bool)'
+    ], wallet);
+    const tx = await erc20.transfer(recipientAddress, amountBig);
+    const receipt = await tx.wait();
+    const txHash = receipt.hash;
     await logEvent(userId, 'transfer_executed', { amount, chain, recipientAddress, txHash });
-    return { success: true, txHash, message: `✅ *${amount} USDT sent.*\n\nTransaction: \`${txHash}\`` };
-  } finally {
-    account.dispose();
-  }
+    return { success: true, txHash, message: `✅ *${amount} iUSDT sent.*\n\nTransaction: \`${txHash}\`` };
+  } catch(e) { throw e; }
 }
 
 async function getBalance(userId, chain = 'arbitrum') {
