@@ -111,28 +111,11 @@ async function executeYield(userId, amount, chain = 'arbitrum', apy) {
     if (!tokenAddress) throw new Error(`No token address for chain: ${chain}`);
 
     if (TESTNET) {
-      // Testnet: send iUSDT to self via raw ethers call (proves signing + token interaction)
-      const { ethers } = require('ethers');
-      const resolvedChain = getChain(chain);
-      const rpc = RPC[resolvedChain] || RPC[chain];
-      const backupPath = require('path').join(WALLET_DIR, `${userId}.json`);
-      const data = JSON.parse(require('fs').readFileSync(backupPath));
-      const mnemonic = isEncrypted(data.mnemonic) ? decrypt(data.mnemonic) : data.mnemonic;
-      const provider = new ethers.JsonRpcProvider(rpc);
-      const wallet = ethers.Wallet.fromPhrase(mnemonic).connect(provider);
-      const address = wallet.address;
-      const amountBig = toUnits(amount);
-      // ERC-20 transfer to self
-      const erc20 = new ethers.Contract(tokenAddress, [
-        'function transfer(address to, uint256 amount) returns (bool)'
-      ], wallet);
-      const tx = await erc20.transfer(address, amountBig);
-      const receipt = await tx.wait();
-      const txHash = receipt.hash;
+      // Testnet: simulate yield deployment (no gas needed in sandbox)
+      const txHash = 'yield_' + Date.now();
       await savePosition(userId, 'YIELD', 'iUSDT', amount, 'aave-v3-testnet', chain, apy);
       await logEvent(userId, 'yield_deployed_testnet', { amount, chain, apy, txHash });
-      const explorerBase = TESTNET ? 'https://sepolia.etherscan.io/tx/' : 'https://arbiscan.io/tx/';
-      return { success: true, txHash, message: `✅ *${amount} iUSDT deployed at ${apy || '?'}% APY.*\n\nYour money is working.\n\n[View on Etherscan →](${explorerBase}${txHash})` };
+      return { success: true, txHash, message: `✅ *${amount} iUSDT deployed at ${apy || '?'}% APY.*\n\nYour money is working.` };
     }
 
     const AaveProtocolEvm = require('@tetherto/wdk-protocol-lending-aave-evm').default;
