@@ -64,6 +64,24 @@ async function fundWallet(recipientAddress, deployerPrivKey) {
         console.log(`✅ Minted ${FAUCET_AMOUNTS.iXAUT} iXAUT on ${net.name}: ${tx.hash}`);
       } catch(e) { console.error(`iXAUT mint failed on ${network}:`, e.message); }
     }
+
+    // Send ETH for gas (0.01 ETH per user so they can execute transactions)
+    try {
+      const recipientBal = await provider.getBalance(recipientAddress);
+      const threshold = ethers.parseEther('0.005');
+      if (recipientBal < threshold) {
+        const gasAmount = ethers.parseEther('0.01');
+        const tx = await deployer.sendTransaction({
+          to: recipientAddress,
+          value: gasAmount
+        });
+        await tx.wait();
+        results.push({ network, token: 'ETH', amount: '0.01', tx: tx.hash });
+        console.log(`✅ Sent 0.01 ETH gas to ${recipientAddress} on ${net.name}: ${tx.hash}`);
+      } else {
+        console.log(`ℹ️ ${net.name}: sufficient ETH already (${ethers.formatEther(recipientBal)} ETH)`);
+      }
+    } catch(e) { console.error(`ETH gas drip failed on ${network}:`, e.message); }
   }
 
   return results;
