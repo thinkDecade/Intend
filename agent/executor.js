@@ -131,7 +131,8 @@ async function executeYield(userId, amount, chain = 'arbitrum', apy) {
       const txHash = receipt.hash;
       await savePosition(userId, 'YIELD', 'iUSDT', amount, 'aave-v3-testnet', chain, apy);
       await logEvent(userId, 'yield_deployed_testnet', { amount, chain, apy, txHash });
-      return { success: true, txHash, message: `✅ *${amount} iUSDT deployed at ${apy || '?'}% APY.*\n\nYour money is working.\n\n_Testnet simulation — Aave V3 mainnet for production._` };
+      const explorerBase = TESTNET ? 'https://sepolia.etherscan.io/tx/' : 'https://arbiscan.io/tx/';
+      return { success: true, txHash, message: `✅ *${amount} iUSDT deployed at ${apy || '?'}% APY.*\n\nYour money is working.\n\n[View on Etherscan →](${explorerBase}${txHash})` };
     }
 
     const AaveProtocolEvm = require('@tetherto/wdk-protocol-lending-aave-evm').default;
@@ -182,7 +183,8 @@ async function executeTransfer(userId, amount, recipientAddress, chain = 'celo')
     const receipt = await tx.wait();
     const txHash = receipt.hash;
     await logEvent(userId, 'transfer_executed', { amount, chain, recipientAddress, txHash });
-    return { success: true, txHash, message: `✅ *${amount} iUSDT sent.*\n\nTransaction: \`${txHash}\`` };
+    const explorerBase = TESTNET ? 'https://sepolia.etherscan.io/tx/' : 'https://arbiscan.io/tx/';
+    return { success: true, txHash, message: `✅ *${amount} iUSDT sent.*\n\n[View on Etherscan →](${explorerBase}${txHash})` };
   } catch(e) { throw e; }
 }
 
@@ -215,6 +217,45 @@ async function getBalance(userId, chain = 'arbitrum') {
   }
 }
 
+async function getFullPortfolio(userId) {
+  const chains = TESTNET
+    ? [{ chain: 'arbitrum', label: 'Ethereum Sepolia', token: 'iUSDT' }]
+    : [{ chain: 'arbitrum', label: 'Arbitrum', token: 'USDT' }, { chain: 'ethereum', label: 'Ethereum', token: 'USDT' }];
+
+  const portfolio = {};
+  for (const { chain, label, token } of chains) {
+    try {
+      const r = await getBalance(userId, chain);
+      if (parseFloat(r.balance) > 0) portfolio[label] = { balance: r.balance, token };
+    } catch(e) {}
+  }
+
+  // Also check iXAUT balance on testnet
+  if (TESTNET) {
+    try {
+      const resolvedChain = getChain('ethereum');
+      const rpc = RPC[resolvedChain];
+      const backupPath = require('path').join(WALLET_DIR, `${userId}.json`);
+      const data = JSON.parse(require('fs').readFileSync(backupPath));
+      const mnemonic = isEncrypted(data.mnemonic) ? decrypt(data.mnemonic) : data.mnemonic;
+      const { ethers } = require('ethers');
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const wallet = ethers.Wallet.fromPhrase(mnemonic).connect(provider);
+      const address = wallet.address;
+      const xautAddress = TOKENS.iXAUT[resolvedChain];
+      if (xautAddress) {
+        const data32 = '0x70a08231' + address.slice(2).padStart(64, '0');
+        const result = await provider.call({ to: xautAddress, data: data32 });
+        const raw = BigInt(result || '0x0');
+        const xautBalance = (Number(raw) / 1e6).toFixed(4);
+        if (parseFloat(xautBalance) > 0) portfolio['Ethereum Sepolia (Gold)'] = { balance: xautBalance, token: 'iXAUT' };
+      }
+    } catch(e) { console.error('[portfolio] iXAUT check failed:', e.message); }
+  }
+
+  return portfolio;
+}
+
 async function main() {
   const cmd = process.argv[2];
   const arg = process.argv[3];
@@ -240,6 +281,9 @@ async function main() {
         break;
       case 'balance':
         result = await getBalance(params.userId, params.chain || 'arbitrum');
+        break;
+      case 'portfolio':
+        result = await getFullPortfolio(params.userId);
         break;
       default:
         throw new Error('Unknown command: ' + cmd);
