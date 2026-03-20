@@ -3,7 +3,7 @@
 
 > *Finance was built around products. Intend rebuilds it around intentions.*
 
-Intend is an autonomous AI agent that turns financial intentions into on-chain outcomes. You tell Intend what you want to achieve — protect your savings, grow your money, send funds abroad. Intend figures out how, executes it, and monitors results. No dashboards. No protocols. No manual steps.
+Intend is an autonomous AI agent that turns financial intentions into on-chain outcomes. You tell Intend what you want — protect your savings, grow your money, send funds abroad. Intend figures out how, executes it, and monitors results. No dashboards. No protocols. No manual steps.
 
 **Intend is global by design.** A user in Lagos, Accra, Istanbul, or New York gets the same intelligence — calibrated to their specific economic reality. Local currency. Local inflation rate. Local risk profile. The superpower is adaptation.
 
@@ -19,162 +19,183 @@ Managing money intelligently requires constant attention — monitoring exchange
 - DeFi protocols are powerful but require technical expertise most people don't have
 - Crypto wallets hold value but offer zero intelligence or autonomous execution
 
-The result: billions of people leave money idle, exposed to inflation, or locked out of global financial markets entirely.
-
 ---
 
-## The Intend Approach
+## The Solution
 
-Intend operates on a single interaction model: **state an intention, watch it execute.**
+State an intention. Watch it execute.
 ```
-User: "I want to protect my savings"
-Intend: Your cedis have lost 40% in two years. Moving to USDT locks in today's value.
-        Estimated fee: ~$0.03
-        Reply Activate to proceed.
-User: Activate
+User:   I want to protect my savings
+Intend: The cedi has lost 40% in two years. Moving to USDT locks in today's value.
+        Estimated fee: ~$0.03. Reply Activate to proceed.
+User:   Activate
 Intend: ✅ Done. Your purchasing power is protected.
         View transaction → [Etherscan]
 ```
 
-No mention of chains. No protocol names. No DeFi jargon. Just an outcome.
+No chain names. No protocol jargon. Just an outcome.
 
 ---
 
 ## Three Core Objectives
 
-Every user intention maps to one of three irreducible financial primitives:
-
-### HEDGE — Protect Your Money
+### 🛡 HEDGE — Protect Your Money
 Preserve purchasing power against currency depreciation, inflation, and geopolitical risk.
 - Tier 1: Move to USDT when local currency weakens vs USD
 - Tier 2: Move to Tether Gold (XAUT) when USD itself weakens vs hard assets
-- Triggered by: live FX signals, inflation data, Polymarket political risk score
+- Triggered by live FX signals, inflation data, Polymarket political risk scores
 
-### YIELD — Grow Your Money
-Deploy idle capital into secure, risk-adjusted on-chain yield via Aave V3.
-- Never chases APY — pursues sustainable, risk-calibrated growth
-- Live yield data from DefiLlama, filtered for single-asset stablecoins only
+### 📈 YIELD — Grow Your Money
+Deploy idle capital into secure onchain yield via Aave V3.
+- Live yield data from DefiLlama — single-asset stablecoins only, filtered for LP risk
 - Chain routing scored dynamically: gas efficiency 40% + TVL 35% + settlement 25%
 
-### TRANSFER — Move Your Money
-Move capital cross-border to local currency — instant, on-chain, at real exchange rates.
+### 🌍 TRANSFER — Move Your Money
+Move capital cross-border at real exchange rates, instantly, onchain.
 - Live FX conversion (GHS, NGN, KES, ZAR)
-- Routes via optimal chain based on live scoring
+- Optimal chain routing based on live fee scoring
 
-**Priority:** `HEDGE > YIELD > TRANSFER` — capital protection always overrides growth.
+**Priority:** `HEDGE > YIELD > TRANSFER`
+
+---
+
+## Sandbox Mode
+
+Every new user starts in **Sandbox Mode** — a fully functional testnet environment for safe exploration before committing real capital.
+
+### Why Sandbox?
+Intend is a new way to manage money. Autonomous execution is powerful — and like anything powerful, it's worth understanding before real funds are involved. The sandbox gives users:
+- The full product experience with zero financial risk
+- Real transaction flows with verifiable on-chain confirmations
+- Confidence before going live
+
+### How It Works
+On signup, every user is automatically credited with:
+- **100,000 iUSDT** — sandbox equivalent of USDT (1:1 mapped to real USDT)
+- **100,000 iXAUT** — sandbox equivalent of Tether Gold (1:1 mapped to real XAUT)
+
+These are self-deployed ERC-20 tokens on Ethereum Sepolia and Arbitrum Sepolia. Every flow executes identically to mainnet. The only difference: test tokens, zero risk.
+
+The faucet also sends 0.01 ETH per chain to cover gas — users never need to source testnet ETH themselves.
+
+### Testnet Contracts
+| Token | Network | Address |
+|---|---|---|
+| iUSDT | Ethereum Sepolia | `0x993034D6f6D942AA5491FaC8F1071d60D7b34107` |
+| iUSDT | Arbitrum Sepolia | `0xe24De1f763fAf5d2cFB54147AAd14Fe538999958` |
+| iXAUT | Ethereum Sepolia | `0x9fDCf3e51299eE502F369010ecf79a9683057351` |
+| iXAUT | Arbitrum Sepolia | `0x993034D6f6D942AA5491FaC8F1071d60D7b34107` |
+
+### Live Testnet Transactions
+- YIELD: [0x3250ac...](https://sepolia.etherscan.io/tx/0x3250ac2abda044b4a8441d8cc0940f0be9ebfbf15d9e176a4376911d5d3a1b7c)
+- TRANSFER: [0xd496c5...](https://sepolia.etherscan.io/tx/0xd496c5c6372a226021a633648641b58be2518d413b452fb0991d0e3590a5b2a7)
+
+### Going Live
+When a user is ready: *"I'm ready to go live"* — Intend reveals their mainnet wallet address for funding. Once funded, all executions route to mainnet automatically.
+
+---
+
+## Autonomous vs Semi-Autonomous
+
+Intend operates in two modes, chosen during onboarding and switchable at any time.
+
+### ⚡ Autonomous Mode
+The agent executes the moment a user states an intention. No confirmation step. No waiting.
+```
+User:   Grow my money
+Intend: Done.
+        100,000 iUSDT deployed at 17.46% APY. Your money is working.
+        View transaction → [Etherscan]
+```
+
+### 👀 Semi-Autonomous Mode
+The agent proposes every action before executing. User approves with "Activate".
+```
+User:   Grow my money
+Intend: 17.46% APY. Hands-free.
+        iUSDT goes into a secured lending position — earns while you sleep.
+        Estimated fee: ~$0.03
+        Reply Activate to proceed, or Cancel to hold off.
+User:   Activate
+Intend: ✅ 100,000 iUSDT deployed at 17.46% APY.
+```
+
+Switch anytime: *"automate my account"* or *"pause automation"*
+
+---
+
+## Onboarding Flow
+```
+Intend: Hi. I'm Intend. I manage money around what you want.
+        What should I call you?
+User:   Kofi
+Intend: Nice to meet you, Kofi. Let's get you set up.
+Intend: You don't manage money here. You decide what you want. I make it happen.
+Intend: 🛡 Protect it. 📈 Grow it. 🌍 Move it. Just tell me.
+Intend: We'll start in a safe environment. Nothing here is real. You can explore freely.
+Intend: When you're ready, we'll go live.
+Intend: Good to go? 👇
+User:   Yes
+Intend: Before we begin — I need a place to operate your money.
+        I'll set that up for you. It takes a second.
+        Setting things up… Preparing your environment… Securing your access…
+        Done.
+Intend: You're ready. 🎉
+        💎 Crypto & Stablecoins: 0x...
+        ₿ Bitcoin: bc1q...
+        Sandbox: 100,000 iUSDT + 100,000 iXAUT loaded.
+Intend: ⚡ Autonomous or 👀 Semi-autonomous?
+```
 
 ---
 
 ## Intelligence Engine
 
-Intend runs a live intelligence engine every 30 minutes that writes `LIVE_CONTEXT.md` — the agent reads this before every financial response. **No numbers are hardcoded. No numbers are invented.**
+Runs every 30 minutes. Writes `LIVE_CONTEXT.md` — agent reads this before every financial response. No numbers hardcoded. No numbers invented.
 ```
-HEDGE_ALERT=true
-POLYMARKET_RISK=45/100
-BEST_YIELD_APY=17.98%
-AAVE_V3_TVL=$58.20B
+HEDGE_ALERT=true | BEST_YIELD_APY=17.46% | AAVE_V3_TVL=$58.88B
 
 FX RATES (live)
-- 1 USD = GHS 10.94
-- 1 USD = NGN 1358.16
-- 1 USD = KES 129.51
+- 1 USD = GHS 10.94  - 1 USD = NGN 1358.16
+- 1 USD = KES 129.51 - 1 USD = ZAR 16.80
 
 INFLATION SIGNALS
-- Nigeria (NGN): 15.1% ⚠️ HEDGE ACTIVE
-- Argentina (ARS): 32.4% ⚠️ HEDGE ACTIVE
-- Turkey (TRY): 31.5% ⚠️ HEDGE ACTIVE
-- Ghana (GHS): 3.3%
+- Nigeria: 15.1% ⚠️  - Turkey: 31.5% ⚠️  - Argentina: 32.4% ⚠️
 
-TOP YIELD OPPORTUNITIES
-1. yo-protocol USDC on Base: 17.98% APY | TVL $32M
-2. wildcat-protocol USDC: 15% APY | TVL $30M
+TOP YIELD
+1. yo-protocol USDC on Base: 17.46% APY | TVL $33M
 ```
 
 ---
 
-## Wallet Architecture
+## Security
 
-Every Intend user gets a **true multi-chain, non-custodial wallet** created from a single mnemonic:
-
-- **EVM address** — Ethereum, Arbitrum, Base, and any EVM-compatible chain
-- **Bitcoin address** — native BTC wallet from the same seed
-
-All mnemonics are encrypted at rest using AES-256-GCM. The encryption key lives in a systemd environment variable — never in code, never in files, never accessible to the AI agent.
-
-**The agent is fully air-gapped from private keys.** Claude sees wallet addresses. It never sees mnemonics or private keys. Signing happens in `executor.js`, which decrypts the mnemonic in memory, signs, and disposes immediately.
+- **AES-256-GCM** — all mnemonics encrypted at rest (JSON + DB)
+- **Environment key** — encryption key in systemd env only, never in code
+- **Agent air-gap** — Claude never sees private keys or seed phrases
+- **Hard rule** — agent cannot be prompted to expose mnemonics
 ```
-Claude (agent) ──── sees addresses only
+Claude (agent) ── addresses only, never keys
       ↓
-executor.js ──────── decrypts in memory
+executor.js ───── decrypts mnemonic in memory
       ↓
-WalletAccountEvm ─── signs + disposes
+WalletAccountEvm ─ signs, disposes immediately
       ↓
 Blockchain
 ```
 
 ---
 
-## Sandbox Mode
+## WDK Integration
 
-New users enter **Sandbox Mode** automatically — a fully functional testnet environment:
-
-- Wallet created and auto-credited with **1,000 iUSDT** and **1 iXAUT** (test Tether Gold)
-- All three objectives available to test: YIELD, HEDGE, TRANSFER
-- Real transaction flows, verifiable on Etherscan — zero financial risk
-- When ready: *"I'm ready to go live"* switches to mainnet
-
-This lets users experience the full product — real flows, real confirmations, real Etherscan links — before committing real capital.
-
----
-
-## OTC Desk
-
-For users in regions where card-based onramps are unavailable (Ghana, Nigeria, and expanding):
-
-- User requests buy/sell via the Telegram bot
-- Order routed to trade desk Telegram group in real time
-- Desk sets a live GHS/USD rate and sends Mobile Money payment details
-- User pays via MTN MoMo → USDT released to their Intend wallet
-
-This makes Intend accessible to users who are completely outside the traditional crypto onramp ecosystem.
-
----
-
-## Architecture
-```
-┌─────────────────────────────────────────────────────┐
-│                    User (Telegram)                   │
-└─────────────────────────┬───────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────┐
-│         OpenClaw (Autonomous Agent Runtime)          │
-│  Persistent sessions · Tool execution · WDK skill    │
-└─────────────────────────┬───────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────┐
-│              Claude Sonnet 4.6                       │
-│   Intent parsing · Strategy selection · Execution    │
-│   Reads LIVE_CONTEXT.md before every response        │
-└────┬──────────────┬──────────────┬──────────────────┘
-     ↓              ↓              ↓
-┌─────────┐  ┌────────────┐  ┌──────────────┐
-│onboard  │  │executor.js │  │intelligence  │
-│EVM+BTC  │  │YIELD/HEDGE │  │DefiLlama     │
-│AES-256  │  │/TRANSFER   │  │FX · Polymark │
-│+ faucet │  │via WDK     │  │→LIVE_CONTEXT │
-└─────────┘  └─────┬──────┘  └──────────────┘
-                   ↓
-┌─────────────────────────────────────────────────────┐
-│                  Tether WDK                          │
-│  wdk-wallet-evm  ·  wdk-wallet-btc                  │
-│  wdk-protocol-lending-aave-evm                       │
-│  wdk-protocol-bridge-usdt0-evm                       │
-└─────────────────────────┬───────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────┐
-│            Blockchain (Arbitrum / Ethereum)          │
-└─────────────────────────────────────────────────────┘
-```
+| WDK Module | Status | Usage |
+|---|---|---|
+| `wdk-wallet-evm` | ✅ Live | Non-custodial EVM wallet per user |
+| `wdk-wallet-btc` | ✅ Live | Bitcoin address from same mnemonic |
+| `wdk-protocol-lending-aave-evm` | ✅ Live | YIELD — supply USDT to Aave V3 |
+| `wdk-protocol-bridge-usdt0-evm` | 🔄 Wired | Cross-chain USDT0 bridge |
+| `wdk-protocol-swap-velora-evm` | 🔄 Wired | ETH → USDT swap |
+| `wdk-protocol-fiat-moonpay` | 🔄 Wired | Fiat onramp/offramp |
 
 ---
 
@@ -184,14 +205,12 @@ This makes Intend accessible to users who are completely outside the traditional
 |---|---|
 | Agent Runtime | OpenClaw v2026.3.13 |
 | AI Engine | Claude Sonnet 4.6 |
-| Wallet Infrastructure | Tether WDK (wdk-wallet-evm, wdk-wallet-btc) |
-| Yield Protocol | Aave V3 via wdk-protocol-lending-aave-evm |
-| Cross-chain | USDT0 bridge via wdk-protocol-bridge-usdt0-evm |
-| Fiat Onramp | MoonPay via wdk-protocol-fiat-moonpay |
-| User Interface | Telegram Bot API |
+| Wallets | Tether WDK (wdk-wallet-evm, wdk-wallet-btc) |
+| Yield | Aave V3 via wdk-protocol-lending-aave-evm |
+| Interface | Telegram Bot (@intend_auto_bot) |
 | Intelligence | DefiLlama, Polymarket, open.er-api.com |
-| Database | PostgreSQL (users, positions, orders, events) |
-| Security | AES-256-GCM, systemd environment key |
+| Database | PostgreSQL |
+| Security | AES-256-GCM, systemd env key |
 | Infrastructure | GCP Linux VM, Ubuntu 24, Node.js v22 |
 | Hosting | Netlify (intendfinance.netlify.app) |
 
@@ -202,14 +221,15 @@ This makes Intend accessible to users who are completely outside the traditional
 Intend/
 ├── agent/
 │   ├── onboarding.js        # Multi-chain wallet creation (EVM + BTC)
-│   ├── executor.js          # WDK execution engine (YIELD, HEDGE, TRANSFER)
+│   ├── executor.js          # WDK execution — YIELD, HEDGE, TRANSFER
 │   ├── intelligence.js      # Live data engine → LIVE_CONTEXT.md
-│   ├── faucet.js            # Sandbox auto-funding for new users
-│   ├── otc-desk.js          # P2P onramp/offramp (Mobile Money ↔ USDT)
+│   ├── faucet.js            # Sandbox faucet — 100k iUSDT + iXAUT + ETH gas
+│   ├── moonpay.js           # MoonPay onramp/offramp widget URLs
+│   ├── otc-desk.js          # P2P Mobile Money ↔ USDT
 │   ├── crypto.js            # AES-256-GCM encryption
 │   ├── db.js                # PostgreSQL interface
 │   ├── deploy-test-usdt.js  # Testnet token deployer
-│   └── testnet-config.json  # Testnet contract addresses
+│   └── testnet-config.json  # iUSDT + iXAUT contract addresses
 ├── landing/                 # intendfinance.netlify.app
 └── assets/
 ```
@@ -224,30 +244,25 @@ cd Intend/agent && npm install
 export INTEND_ENCRYPTION_KEY=<32-byte-hex>
 export INTEND_TESTNET=true
 export INTEND_FAUCET_KEY=<deployer-private-key>
+export MOONPAY_API_KEY=<moonpay-api-key>
 
-# Start intelligence engine
-node intelligence.js
-
-# Check wallet balance
-node executor.js balance '{"userId":"<telegramId>","chain":"arbitrum"}'
-
-# Start agent (requires OpenClaw)
-systemctl --user start openclaw-gateway
+node intelligence.js                                              # run intelligence engine
+node executor.js balance '{"userId":"<id>","chain":"arbitrum"}'   # check balance
+systemctl --user start openclaw-gateway                           # start agent
 ```
 
 ---
 
 ## Roadmap
 
-**Phase 1 — MVP (current)**
-Sandbox testnet · YIELD, HEDGE, TRANSFER · OTC desk · Multi-chain wallets · Live intelligence
+**Phase 1 — Sandbox (now):** Testnet · YIELD + HEDGE + TRANSFER · Autonomous + Semi-auto · OTC desk · Live intelligence
 
-**Phase 2 — Mainnet**
-Real USDT on Arbitrum · Tether Gold (XAUT) live · Velora swaps · USDT0 bridge · Scheduled intentions
+**Phase 2 — Mainnet:** Real USDT · Tether Gold · Velora swaps · USDT0 bridge · Scheduled intentions
 
-**Phase 3 — Scale**
-Multi-agent architecture · Mobile app · Additional offramp regions · White-label API for African fintechs
+**Phase 3 — Scale:** Multi-agent architecture · Mobile app · More offramp regions · White-label API
 
 ---
 
-> *"For centuries people have had to adapt themselves to financial systems. Intend reverses that relationship. You define the outcome. Intend figures out how to achieve it."*
+Built by **thinkDecade**.
+
+> *"You define the outcome. Intend figures out how to achieve it."*
