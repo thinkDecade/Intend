@@ -18,15 +18,43 @@ const TOKENS = {
     arbitrum:  '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
     ethereum:  '0xdAC17F958D2ee523a2206206994597C13D831ec7',
     celo:      '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e',
+  },
+  // Testnet iUSDT (Intend Test USDT)
+  iUSDT: {
+    'arbitrum-sepolia': '0xe24De1f763fAf5d2cFB54147AAd14Fe538999958',
+    'ethereum-sepolia': '0x993034D6f6D942AA5491FaC8F1071d60D7b34107',
   }
 };
 
+const TESTNET = process.env.INTEND_TESTNET === 'true';
+
+function getTokenAddress(chain) {
+  if (TESTNET) {
+    // Map logical chain to testnet chain for token lookup
+    const testMap = { 'arbitrum': 'ethereum-sepolia', 'ethereum': 'ethereum-sepolia' };
+    const resolvedChain = testMap[chain] || (chain + '-sepolia');
+    return TOKENS.iUSDT[resolvedChain] || null;
+  }
+  return TOKENS.USDT[chain] || null;
+}
+
 const RPC = {
-  arbitrum:  'https://arb1.arbitrum.io/rpc',
-  ethereum:  'https://ethereum-rpc.publicnode.com',
-  celo:      'https://forno.celo.org',
-  base:      'https://mainnet.base.org',
+  arbitrum:           'https://arb1.arbitrum.io/rpc',
+  ethereum:           'https://ethereum-rpc.publicnode.com',
+  celo:               'https://forno.celo.org',
+  base:               'https://mainnet.base.org',
+  'arbitrum-sepolia': 'https://sepolia-rollup.arbitrum.io/rpc',
+  'ethereum-sepolia': 'https://ethereum-sepolia-rpc.publicnode.com',
 };
+
+function getChain(chain) {
+  if (TESTNET) {
+    // Aave V3 only on Ethereum Sepolia — route all yield chains there
+    if (chain === 'arbitrum') return 'ethereum-sepolia';
+    if (chain === 'ethereum') return 'ethereum-sepolia';
+  }
+  return chain;
+}
 
 const WALLET_DIR = path.join(process.env.HOME, '.openclaw/workspace/wallets');
 
@@ -37,7 +65,10 @@ async function getEvmAccount(telegramId, chain = 'arbitrum') {
   const encMnemonic = data.mnemonic;
   if (!encMnemonic) throw new Error('No mnemonic found');
   const mnemonic = isEncrypted(encMnemonic) ? decrypt(encMnemonic) : encMnemonic;
-  return new WalletAccountEvm(mnemonic, "0'/0/0", { provider: RPC[chain] || RPC.arbitrum });
+  const resolvedChain = getChain(chain);
+  const rpc = RPC[resolvedChain] || RPC[chain] || RPC.arbitrum;
+  console.error(`[executor] chain=${chain} resolved=${resolvedChain} rpc=${rpc}`);
+  return new WalletAccountEvm(mnemonic, "0'/0/0", { provider: rpc });
 }
 
 async function logEvent(userId, type, payload) {
@@ -65,12 +96,37 @@ function toUnits(amount, decimals = 6) {
 }
 
 async function executeYield(userId, amount, chain = 'arbitrum', apy) {
-  const AaveProtocolEvm = require('@tetherto/wdk-protocol-lending-aave-evm').default;
   const account = await getEvmAccount(userId, chain);
   try {
+    const tokenAddress = getTokenAddress(chain);
+    if (!tokenAddress) throw new Error(`No token address for chain: ${chain}`);
+
+    if (TESTNET) {
+      // Testnet: send iUSDT to self via raw ethers call (proves signing + token interaction)
+      const { ethers } = require('ethers');
+      const resolvedChain = getChain(chain);
+      const rpc = RPC[resolvedChain] || RPC[chain];
+      const backupPath = require('path').join(WALLET_DIR, `${userId}.json`);
+      const data = JSON.parse(require('fs').readFileSync(backupPath));
+      const mnemonic = isEncrypted(data.mnemonic) ? decrypt(data.mnemonic) : data.mnemonic;
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const wallet = ethers.Wallet.fromPhrase(mnemonic).connect(provider);
+      const address = wallet.address;
+      const amountBig = toUnits(amount);
+      // ERC-20 transfer to self
+      const erc20 = new ethers.Contract(tokenAddress, [
+        'function transfer(address to, uint256 amount) returns (bool)'
+      ], wallet);
+      const tx = await erc20.transfer(address, amountBig);
+      const receipt = await tx.wait();
+      const txHash = receipt.hash;
+      await savePosition(userId, 'YIELD', 'iUSDT', amount, 'aave-v3-testnet', chain, apy);
+      await logEvent(userId, 'yield_deployed_testnet', { amount, chain, apy, txHash });
+      return { success: true, txHash, message: `✅ *${amount} iUSDT deployed at ${apy || '?'}% APY.*\n\nYour money is working.\n\n_Testnet simulation — Aave V3 mainnet for production._` };
+    }
+
+    const AaveProtocolEvm = require('@tetherto/wdk-protocol-lending-aave-evm').default;
     const aave = new AaveProtocolEvm(account);
-    const tokenAddress = TOKENS.USDT[chain];
-    if (!tokenAddress) throw new Error(`No USDT address for chain: ${chain}`);
     const amountBig = toUnits(amount);
     const result = await aave.supply({ token: tokenAddress, amount: amountBig });
     const txHash = result?.hash || result?.txHash || 'pending';
@@ -111,12 +167,28 @@ async function executeTransfer(userId, amount, recipientAddress, chain = 'celo')
 }
 
 async function getBalance(userId, chain = 'arbitrum') {
+  const resolvedChain = getChain(chain);
   const account = await getEvmAccount(userId, chain);
   try {
-    const tokenAddress = TOKENS.USDT[chain];
-    if (!tokenAddress) throw new Error(`No USDT address for chain: ${chain}`);
-    const balance = await account.getBalance({ token: tokenAddress });
-    const readable = (Number(balance) / 1e6).toFixed(2);
+    const tokenAddress = getTokenAddress(chain);
+    if (!tokenAddress) throw new Error(`No token address for chain: ${chain} (testnet=${TESTNET})`);
+    // Use direct ERC-20 balanceOf call — getBalance() ignores token param
+    const provider = account.provider || account._provider;
+    const address = await account.getAddress();
+    // ERC-20 balanceOf ABI encoded: balanceOf(address)
+    const data = '0x70a08231' + address.slice(2).padStart(64, '0');
+    const result = await fetch(RPC[resolvedChain] || RPC[chain], {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'eth_call',
+        params: [{ to: tokenAddress, data }, 'latest']
+      })
+    });
+    const json = await result.json();
+    if (json.error) throw new Error(json.error.message);
+    const raw = BigInt(json.result || '0x0');
+    const readable = (Number(raw) / 1e6).toFixed(2);
     return { success: true, balance: readable, chain };
   } finally {
     account.dispose();
@@ -161,3 +233,15 @@ async function main() {
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });
+
+async function getAllBalances(userId) {
+  const chains = ['arbitrum', 'ethereum', 'celo', 'base'];
+  const results = {};
+  for (const chain of chains) {
+    try {
+      const r = await getBalance(userId, chain);
+      if (parseFloat(r.balance) > 0) results[chain] = r.balance;
+    } catch(e) { /* skip chains with no USDT address */ }
+  }
+  return results;
+}

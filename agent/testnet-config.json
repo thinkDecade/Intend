@@ -1,0 +1,11 @@
+{
+  "arbitrum-sepolia": {
+    "iUSDT": "0xe24De1f763fAf5d2cFB54147AAd14Fe538999958",
+    "deployer": "0xfa6355eAcEAB75577119629318EcB2C7B973684c",
+    "deployedAt": "2026-03-20T14:52:41.989Z"
+  },
+  "ethereum-sepolia": {
+    "iUSDT": "0x993034D6f6D942AA5491FaC8F1071d60D7b34107",
+    "deployedAt": "2026-03-20T15:05:15.466Z"
+  }
+}
