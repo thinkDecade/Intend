@@ -11,8 +11,8 @@ const path = require('path');
 const TESTNET_CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, 'testnet-config.json')));
 
 const FAUCET_AMOUNTS = {
-  iUSDT: 1000,  // 1,000 test USDT
-  iXAUT: 1,     // 1 test gold (= ~$2,600 value simulation)
+  iUSDT: 100000,  // 100,000 test USDT — enough to meaningfully test all flows
+  iXAUT: 100000,  // 100,000 test Gold — mirrors real XAUT purchasing power in sandbox
 };
 
 const NETWORKS = {
