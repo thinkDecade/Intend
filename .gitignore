@@ -11,3 +11,7 @@ config.json
 
 # OS
 .DS_Store
+agent/config.json
+agent/orders.json
+agent/*.log
+*.env
