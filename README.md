@@ -235,7 +235,6 @@ Intend becomes a financial coordination layer, deeply integrated with liquidity 
 Phase 05 : Autonomy - Predictive Financial Intelligence
 
 Intend becomes a fully autonomous financial intelligence system that anticipates user needs and acts ahead of explicit intent.
----
 
 
 > *"A future where humans have the option not to worry about how their finances are managed, is a future filled with abundant freedom - Intend is built to enable that!."*
