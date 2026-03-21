@@ -1,4 +1,4 @@
-# Intend - An Autonomou Financial Conciege
+# Intend - Autonomous Financial Concierge
 ### Finance, built around users intentions!
 
 > 
