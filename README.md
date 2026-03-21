@@ -1,43 +1,58 @@
-# Intend
-### Autonomous Financial Concierge
+# Intend - An Autonomou Financial Conciege
+### Finance, built around users intentions!
 
-> *Finance was built around products. Intend rebuilds it around intentions.*
+> 
 
-Intend is an autonomous AI agent that turns financial intentions into on-chain outcomes. You tell Intend what you want — protect your savings, grow your money, send funds abroad. Intend figures out how, executes it, and monitors results. No dashboards. No protocols. No manual steps.
+Intend is an autonomous financial concierge that turns financial intentions into outcomes. You tell Intend what you want — e.g, protect savings, grow money, send funds abroad. Intend figures out how, executes it. 
 
-**Intend is global by design.** A user in Lagos, Accra, Istanbul, or New York gets the same intelligence — calibrated to their specific economic reality. Local currency. Local inflation rate. Local risk profile. The superpower is adaptation.
-
-[Try it on Telegram →](https://t.me/intend_auto_bot) · [Landing Page →](https://intendfinance.netlify.app)
+https://intendfinance.netlify.app
 
 ---
 
-## The Problem
+## The Problem - Managing money is a full time job and crypto makes it even harder!
 
-Managing money intelligently requires constant attention — monitoring exchange rates, choosing yield strategies, timing remittances, protecting against inflation. This cognitive burden is too high for most people.
+For most of history, people have had to chase a moving world with static money, adjusting, reacting, trying to stay ahead of forces they don’t control. But today, change is no longer gradual. It is sudden, global, and unforgiving. Inflation erodes hard earned wealth silently, currencies collapse overnight, and entire economies shift in ways no individual can predict or respond to in time. And yet, the burden remains the same:  You either manage your money yourself
+or you leave it to chance, hoping the world doesn’t move against you. That is the flaw. Today, you’re forced to choose between two imperfect systems.
 
-- Traditional banks offer no onchain access and impose friction-heavy cross-border rails
-- DeFi protocols are powerful but require technical expertise most people don't have
-- Crypto wallets hold value but offer zero intelligence or autonomous execution
+1. Traditional Finance (Passive, but Restricted)
 
----
+In the legacy world, your money is passive in all the wrong ways.
 
-## The Solution
+- Inflationary Decay — It sits still while its value quietly erodes
 
-State an intention. Watch it execute.
-```
-User:   I want to protect my savings
-Intend: The cedi has lost 40% in two years. Moving to USDT locks in today's value.
-        Estimated fee: ~$0.03. Reply Activate to proceed.
-User:   Activate
-Intend: ✅ Done. Your purchasing power is protected.
-        View transaction → [Etherscan]
-```
+- Velocity Bottlenecks — It moves slowly when you need it fast
 
-No chain names. No protocol jargon. Just an outcome.
+- Institutional Walls — It’s locked behind systems you don’t control
 
----
+2. Onchain Finance (Powerful, but Overwhelming)
 
-## Three Core Objectives
+Onchain finance improved access at global scale, but pushed the burden of execution entirely onto the user.
+
+- Guideless Opportunity : Infinite paths, no clear direction
+
+- Fragmentation : Disconnected tools, chains, and interfaces
+
+- Manual Execution : Every decision, every action, is on you
+
+More access didn’t simplify things. It just multiplied the maintenance.
+
+An overwhelmingly changing world, with unbearably complex financial systems left for the everyday person to navigate.
+
+An impossible task. There should be a better way!
+
+
+
+
+## INTEND - money, finally adapting and moving when it needs to, autonomously.
+
+Intend is an autonomous financial concierge that translates financial intentions into actionable outcomes. It operates through a self-controlled wallet, enabling users to fund, manage, and direct resources according to their goals, through natural language. The ultimate aim is for Intend to have full context of a users realities, and executive proactive financial actions to the benefit of the user. 
+
+Intend is being built around three irreducible financial primitives:
+•	HEDGE — Protect user money
+•	YIELD — Grow user money
+•	TRANSFER — Move user money
+
+## Three Core Objectives/Primitive
 
 ### 🛡 HEDGE — Protect Your Money
 Preserve purchasing power against currency depreciation, inflation, and geopolitical risk.
@@ -55,9 +70,24 @@ Move capital cross-border at real exchange rates, instantly, onchain.
 - Live FX conversion (GHS, NGN, KES, ZAR)
 - Optimal chain routing based on live fee scoring
 
-**Priority:** `HEDGE > YIELD > TRANSFER`
+---
+## System Architecture
+
+Every user message flows through the following layers.
+
+<img width="839" height="698" alt="image" src="https://github.com/user-attachments/assets/0bbc1e0d-32fb-4b83-aedc-321007e6fb75" />
+
+
 
 ---
+
+## User Journey
+
+From first message to live execution — including the sandbox-first approach.
+
+
+<img width="346" height="659" alt="image" src="https://github.com/user-attachments/assets/01e2e912-f040-463f-9f62-9179d6d7c80f" />
+
 
 ## Sandbox Mode
 
@@ -77,6 +107,9 @@ On signup, every user is automatically credited with:
 These are self-deployed ERC-20 tokens on Ethereum Sepolia and Arbitrum Sepolia. Every flow executes identically to mainnet. The only difference: test tokens, zero risk.
 
 The faucet also sends 0.01 ETH per chain to cover gas — users never need to source testnet ETH themselves.
+
+<img width="1124" height="629" alt="image" src="https://github.com/user-attachments/assets/a2e721f0-da18-41f4-b11e-c0ab04c684f0" />
+
 
 ### Testnet Contracts
 | Token | Network | Address |
@@ -101,90 +134,16 @@ Intend operates in two modes, chosen during onboarding and switchable at any tim
 
 ### ⚡ Autonomous Mode
 The agent executes the moment a user states an intention. No confirmation step. No waiting.
-```
-User:   Grow my money
-Intend: Done.
-        100,000 iUSDT deployed at 17.46% APY. Your money is working.
-        View transaction → [Etherscan]
-```
 
 ### 👀 Semi-Autonomous Mode
 The agent proposes every action before executing. User approves with "Activate".
-```
-User:   Grow my money
-Intend: 17.46% APY. Hands-free.
-        iUSDT goes into a secured lending position — earns while you sleep.
-        Estimated fee: ~$0.03
-        Reply Activate to proceed, or Cancel to hold off.
-User:   Activate
-Intend: ✅ 100,000 iUSDT deployed at 17.46% APY.
-```
 
 Switch anytime: *"automate my account"* or *"pause automation"*
 
----
-
-## Onboarding Flow
-```
-Intend: Hi. I'm Intend. I manage money around what you want.
-        What should I call you?
-User:   Kofi
-Intend: Nice to meet you, Kofi. Let's get you set up.
-Intend: You don't manage money here. You decide what you want. I make it happen.
-Intend: 🛡 Protect it. 📈 Grow it. 🌍 Move it. Just tell me.
-Intend: We'll start in a safe environment. Nothing here is real. You can explore freely.
-Intend: When you're ready, we'll go live.
-Intend: Good to go? 👇
-User:   Yes
-Intend: Before we begin — I need a place to operate your money.
-        I'll set that up for you. It takes a second.
-        Setting things up… Preparing your environment… Securing your access…
-        Done.
-Intend: You're ready. 🎉
-        💎 Crypto & Stablecoins: 0x...
-        ₿ Bitcoin: bc1q...
-        Sandbox: 100,000 iUSDT + 100,000 iXAUT loaded.
-Intend: ⚡ Autonomous or 👀 Semi-autonomous?
-```
+<img width="541" height="632" alt="image" src="https://github.com/user-attachments/assets/ec6452e9-7d83-455b-8f75-fec47895812d" />
 
 ---
 
-## Intelligence Engine
-
-Runs every 30 minutes. Writes `LIVE_CONTEXT.md` — agent reads this before every financial response. No numbers hardcoded. No numbers invented.
-```
-HEDGE_ALERT=true | BEST_YIELD_APY=17.46% | AAVE_V3_TVL=$58.88B
-
-FX RATES (live)
-- 1 USD = GHS 10.94  - 1 USD = NGN 1358.16
-- 1 USD = KES 129.51 - 1 USD = ZAR 16.80
-
-INFLATION SIGNALS
-- Nigeria: 15.1% ⚠️  - Turkey: 31.5% ⚠️  - Argentina: 32.4% ⚠️
-
-TOP YIELD
-1. yo-protocol USDC on Base: 17.46% APY | TVL $33M
-```
-
----
-
-## Security
-
-- **AES-256-GCM** — all mnemonics encrypted at rest (JSON + DB)
-- **Environment key** — encryption key in systemd env only, never in code
-- **Agent air-gap** — Claude never sees private keys or seed phrases
-- **Hard rule** — agent cannot be prompted to expose mnemonics
-```
-Claude (agent) ── addresses only, never keys
-      ↓
-executor.js ───── decrypts mnemonic in memory
-      ↓
-WalletAccountEvm ─ signs, disposes immediately
-      ↓
-Blockchain
-```
-
----
 
 ## WDK Integration
 
@@ -253,16 +212,30 @@ systemctl --user start openclaw-gateway                           # start agent
 
 ---
 
-## Roadmap
+## Roadmap :  From intention to inevitability
+Intend will power everyday financial needs, autonomously.
 
-**Phase 1 — Sandbox (now):** Testnet · YIELD + HEDGE + TRANSFER · Autonomous + Semi-auto · OTC desk · Live intelligence
+Phase 01
+Foundation : Intent → Execution (Single-Agent MVP)
 
-**Phase 2 — Mainnet:** Real USDT · Tether Gold · Velora swaps · USDT0 bridge · Scheduled intentions
+A fully functional intent-driven financial agent that can interpret user intent and execute HEDGE, YIELD, and TRANSFER end-to-end onchain with sandbox baked in.
 
-**Phase 3 — Scale:** Multi-agent architecture · Mobile app · More offramp regions · White-label API
+Phase 02 : Intelligence - Context-Aware Autonomy
 
+Intend evolves from reactive execution to context-aware financial intelligence, capable of proactive decision-making and persistent-autonomous operation.
+
+Phase 03 : Decomposition Multi-Agent System
+
+Transition from a single agent to a modular, specialized multi-agent architecture enabling scale, parallelism, and system intelligence.
+
+Phase 04: Expansion - Financial Network & Liquidity Layer
+
+Intend becomes a financial coordination layer, deeply integrated with liquidity providers, FX partners, and institutional rails.
+
+Phase 05 : Autonomy - Predictive Financial Intelligence
+
+Intend becomes a fully autonomous financial intelligence system that anticipates user needs and acts ahead of explicit intent.
 ---
 
-Built by **thinkDecade**.
 
-> *"You define the outcome. Intend figures out how to achieve it."*
+> *"A future where humans have the option not to worry about how their finances are managed, is a future filled with abundant freedom - Intend is built to enable that!."*
