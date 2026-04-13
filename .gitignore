@@ -1,18 +1,79 @@
 # Dependencies
-agent/node_modules/
 node_modules/
+.pnp
+.pnp.js
 
-# Wallets & sensitive data
-wallets/
-config.json
-*.log
-*.bak
+# Build outputs
+dist/
+build/
+.next/
+out/
+.turbo/
+
+# Environment variables — NEVER commit
 .env
+.env.local
+.env.*.local
+.env.development
+.env.staging
+.env.production
+
+# Secrets
+*.pem
+*.key
+*.p12
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+pm2.log
 
 # OS
 .DS_Store
-agent/config.json
-agent/orders.json
-agent/*.log
-*.env
-agent/orders.json
+Thumbs.db
+~$*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Turborepo
+.turbo/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Supabase local dev
+supabase/.temp/
+supabase/functions/.env
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+*.docx
+*.xlsx
+
+# Nested repos / local website dev
+Website/
+
+# Local IDE / Claude settings
+.claude/settings.local.json
+.claude/launch.json
+
+# Old root-level files (archived in v0-hackathon, not part of monorepo)
+CLAUDE_channels.md
+CLAUDE_execution.md
+CLAUDE_intelligence.md
+CLAUDE_security_qa.md
+WORKSPACE.md
+tasks_backlog.md
+intend_schema_001.sql
+intend_frontend_try_1.html
+intend_logos_files/
