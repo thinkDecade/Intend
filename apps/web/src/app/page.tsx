@@ -20,15 +20,12 @@ const stagger = {
   visible: { transition: { staggerChildren: 0.12 } },
 };
 
+// v0.5: 4 active primitives
 const primitives = [
-  { key: 'PROTECT', label: 'Protect', desc: 'Shield your capital from currency devaluation and inflation risk.' },
-  { key: 'GROW',    label: 'Grow',    desc: 'Put idle money to work earning yield — automatically optimised.' },
-  { key: 'MOVE',    label: 'Move',    desc: 'Send value to anyone, anywhere — any asset, any destination.' },
-  { key: 'CONVERT', label: 'Convert', desc: 'Exchange assets at the best available rate, instantly.' },
-  { key: 'SAVE',    label: 'Save',    desc: 'Set a goal, name it, and watch your money grow toward it.' },
-  { key: 'EARN',    label: 'Earn',    desc: 'Detect incoming value and route it intelligently.' },
-  { key: 'INVEST',  label: 'Invest',  desc: 'Acquire assets you believe in — with conviction.' },
-  { key: 'SPEND',   label: 'Spend',   desc: 'Pay anywhere via card, crypto checkout, or open payments.' },
+  { key: 'PROTECT', label: 'Protect', desc: 'Intend watches inflation and FX signals around the clock. When your savings are at risk, it alerts you and acts — before you know you need protection.' },
+  { key: 'CONVERT', label: 'Convert', desc: 'Best-rate asset exchange. Intend fetches live quotes, routes through the deepest pool, and executes. You just say what you want.' },
+  { key: 'SEND',    label: 'Send',    desc: 'Transfer value to any wallet or Intend user. Recipients without wallets get a secure claim link — no setup required on their end.' },
+  { key: 'SPEND',   label: 'Spend',   desc: 'Pay anywhere: card-enabled merchants, crypto checkout, or open payment protocols. One interface for everything.' },
 ];
 
 const steps = [
@@ -38,8 +35,8 @@ const steps = [
 ];
 
 const stats = [
-  { value: '8',   label: 'Financial primitives' },
-  { value: '3',   label: 'Channels — Telegram, Web, WhatsApp' },
+  { value: '4',   label: 'Financial primitives — v0.5' },
+  { value: '6h',  label: 'PROTECT monitoring cycle' },
   { value: '<1s', label: 'Intent interpretation' },
   { value: '0',   label: 'Protocol knowledge required' },
 ];
@@ -100,9 +97,9 @@ export default function LandingPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5 }}
           >
-            Tell Intend what you want to happen with your money.
-            It interprets your intention, builds a plan, and executes
-            — handling every step invisibly.
+            The smartest financial concierge on earth. Intend understands
+            your economic reality, acts on your intentions, and protects
+            your capital — before you know you need it.
           </motion.p>
 
           <motion.div
@@ -201,8 +198,48 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
+      {/* ═══ EXECUTION MODES ═══ */}
+      <section className="lp-section">
+        <motion.div
+          className="lp-section-inner"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={stagger}
+        >
+          <motion.div className="lp-section-tag" variants={fade}>
+            Execution modes
+          </motion.div>
+          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
+            Your level of control. Your choice.
+          </motion.h2>
+
+          <div className="lp-modes">
+            <motion.div className="lp-mode-card" variants={fade} custom={2}>
+              <div className="lp-mode-label">Semi-Autonomous <span className="lp-mode-default">default</span></div>
+              <p className="lp-mode-desc">
+                Intend builds the plan and presents it. You review, then confirm with one tap.
+                Trust is built through transparency — you always know what&apos;s about to happen.
+              </p>
+              <div className="lp-mode-trigger">Say: &ldquo;ask me before executing&rdquo;</div>
+            </motion.div>
+            <motion.div className="lp-mode-card lp-mode-auto" variants={fade} custom={3}>
+              <div className="lp-mode-label">Autonomous</div>
+              <p className="lp-mode-desc">
+                Intent in. Outcome out. Intend executes immediately and sends you a receipt.
+                For users who want zero friction and have established trust.
+              </p>
+              <div className="lp-mode-trigger">Say: &ldquo;go autonomous&rdquo;</div>
+            </motion.div>
+          </div>
+          <motion.p className="lp-modes-note" variants={fade} custom={4}>
+            Switch modes any time — from settings or mid-conversation. PROTECT always asks first, no matter what.
+          </motion.p>
+        </motion.div>
+      </section>
+
       {/* ═══ PRIMITIVES ═══ */}
-      <section className="lp-section" id="primitives">
+      <section className="lp-section lp-section-dark" id="primitives">
         <motion.div
           className="lp-section-inner"
           initial="hidden"
@@ -214,7 +251,7 @@ export default function LandingPage() {
             Capabilities
           </motion.div>
           <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Eight ways your money can work for you.
+            Four things your money can do — right now.
           </motion.h2>
 
           <div className="lp-prim-grid">
@@ -252,30 +289,33 @@ export default function LandingPage() {
 
           <motion.div className="lp-showcase" variants={fade} custom={2}>
             <div className="lp-showcase-chat">
-              <div className="lp-chat-msg lp-chat-user">
-                Protect $2,000 of my savings from inflation
-              </div>
-              <div className="lp-chat-msg lp-chat-agent">
-                <div className="lp-chat-agent-label">intend</div>
-                I&apos;ll move $2,000 into a protected position earning 4.8% — fully backed
-                and withdrawable anytime. Here&apos;s the plan:
+              {/* Proactive PROTECT alert — Intend acts before user asks */}
+              <div className="lp-chat-msg lp-chat-agent lp-chat-proactive">
+                <div className="lp-chat-agent-label">⚡ intend noticed something</div>
+                The cedi has lost 4.2% against the dollar this week and inflation
+                is running at 18.4%. Your $1,200 in savings is exposed.
               </div>
               <div className="lp-chat-plan">
                 <div className="lp-plan-row">
                   <span className="lp-plan-key">Action</span>
-                  <span className="lp-plan-val">Protect $2,000</span>
+                  <span className="lp-plan-val">Protect $1,200</span>
                 </div>
                 <div className="lp-plan-row">
-                  <span className="lp-plan-key">Expected yield</span>
+                  <span className="lp-plan-key">Protection from</span>
+                  <span className="lp-plan-val">~18% annual purchasing-power loss</span>
+                </div>
+                <div className="lp-plan-row">
+                  <span className="lp-plan-key">Yield while protected</span>
                   <span className="lp-plan-val lp-plan-green">4.8% APY</span>
                 </div>
                 <div className="lp-plan-row">
                   <span className="lp-plan-key">Fee</span>
-                  <span className="lp-plan-val">$0.12</span>
+                  <span className="lp-plan-val">$0.14</span>
                 </div>
               </div>
-              <div className="lp-chat-confirm">
-                <div className="lp-confirm-btn">Protect $2,000 &#8594;</div>
+              <div className="lp-chat-confirm lp-chat-confirm-two">
+                <div className="lp-confirm-btn">Protect my savings &#8594;</div>
+                <div className="lp-dismiss-btn">Not now</div>
               </div>
             </div>
           </motion.div>
@@ -295,22 +335,22 @@ export default function LandingPage() {
             Channels
           </motion.div>
           <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Use Intend wherever you are.
+            Telegram and Web. More coming.
           </motion.h2>
           <motion.p className="lp-section-lead" variants={fade} custom={2}>
-            One account. Three channels. Your financial state follows you
+            One account. Two channels for v0.5. Your financial state follows you
             seamlessly — no context lost, ever.
           </motion.p>
 
           <div className="lp-channels">
             {[
-              { name: 'Telegram', icon: '💬', desc: 'Message your intentions directly in chat.' },
-              { name: 'Web App',  icon: '🌐', desc: 'Full dashboard with streaming confirmations.' },
-              { name: 'WhatsApp', icon: '📱', desc: 'Coming soon — same experience, another channel.' },
+              { name: 'Telegram', icon: '💬', desc: 'Message your intentions directly in chat. The fastest way to act.', live: true },
+              { name: 'Web App',  icon: '🌐', desc: 'Full dashboard with streaming plan previews and one-tap execution.', live: true },
+              { name: 'WhatsApp', icon: '📱', desc: 'In development — same Intend experience on a third channel.', live: false },
             ].map((ch, i) => (
-              <motion.div key={ch.name} className="lp-channel-card" variants={fade} custom={i + 3}>
+              <motion.div key={ch.name} className={`lp-channel-card${ch.live ? '' : ' lp-channel-dim'}`} variants={fade} custom={i + 3}>
                 <div className="lp-channel-icon">{ch.icon}</div>
-                <div className="lp-channel-name">{ch.name}</div>
+                <div className="lp-channel-name">{ch.name}{ch.live ? '' : ' ·\u00a0soon'}</div>
                 <div className="lp-channel-desc">{ch.desc}</div>
               </motion.div>
             ))}

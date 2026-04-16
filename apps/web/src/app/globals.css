@@ -1193,8 +1193,8 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
 /* ── Primitives grid ── */
 .lp-prim-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
   margin-top: 56px;
 }
 .lp-prim-card {
@@ -1309,6 +1309,10 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
 .lp-chat-confirm {
   text-align: center;
 }
+.lp-chat-confirm-two {
+  display: flex;
+  gap: 12px;
+}
 .lp-confirm-btn {
   display: inline-block;
   padding: 14px 40px;
@@ -1319,6 +1323,86 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
   border-radius: 10px;
   width: 100%;
   text-align: center;
+  flex: 1;
+}
+.lp-dismiss-btn {
+  display: inline-block;
+  padding: 14px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Proactive alert styling */
+.lp-chat-proactive {
+  border-left: 2px solid var(--accent);
+  background: rgba(212, 162, 74, 0.06) !important;
+}
+
+/* ── Execution Modes ── */
+.lp-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 56px;
+}
+.lp-mode-card {
+  padding: 40px 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  transition: all 0.3s var(--ease);
+}
+.lp-mode-card:hover {
+  border-color: var(--border2);
+}
+.lp-mode-auto {
+  border-color: var(--accent-dim);
+  background: rgba(212, 162, 74, 0.04);
+}
+.lp-mode-label {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lp-mode-default {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: rgba(212, 162, 74, 0.15);
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.lp-mode-desc {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text2);
+  margin: 0 0 24px;
+}
+.lp-mode-trigger {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text3);
+  background: var(--bg3);
+  padding: 8px 14px;
+  border-radius: 8px;
+  display: inline-block;
+}
+.lp-modes-note {
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--text3);
+  text-align: center;
 }
 
 /* ── Channels ── */
@@ -1327,6 +1411,13 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
   grid-template-columns: repeat(3, 1fr);
   gap: 24px;
   margin-top: 56px;
+}
+.lp-channel-dim {
+  opacity: 0.5;
+}
+.lp-channel-dim:hover {
+  opacity: 0.7;
+  transform: none !important;
 }
 .lp-channel-card {
   text-align: center;
@@ -1433,7 +1524,6 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
 
 /* ── Landing mobile ── */
 @media (max-width: 1024px) {
-  .lp-prim-grid { grid-template-columns: repeat(2, 1fr); }
   .lp-stats-inner { grid-template-columns: repeat(2, 1fr); gap: 32px; }
 }
 
@@ -1447,17 +1537,19 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
   .lp-section { padding: 72px 24px; }
   .lp-steps { grid-template-columns: 1fr; gap: 20px; }
   .lp-step { padding: 28px 24px; }
+  .lp-modes { grid-template-columns: 1fr; }
+  .lp-prim-grid { grid-template-columns: 1fr; }
   .lp-channels { grid-template-columns: 1fr; gap: 16px; }
   .lp-showcase-chat { padding: 20px; }
   .lp-chat-user { margin-left: 24px; }
   .lp-chat-agent { margin-right: 24px; }
+  .lp-chat-confirm-two { flex-direction: column; }
   .lp-cta-section { padding: 80px 24px; }
   .lp-footer { padding: 40px 24px 32px; }
   .lp-footer-brand { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
 
 @media (max-width: 480px) {
-  .lp-prim-grid { grid-template-columns: 1fr; }
   .lp-stats-inner { grid-template-columns: 1fr 1fr; gap: 24px; }
   .lp-hero-actions { flex-direction: column; }
   .lp-btn-primary, .lp-btn-ghost { width: 100%; text-align: center; }
