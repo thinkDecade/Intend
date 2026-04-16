@@ -1,0 +1,16 @@
+{
+  "protocol": "erc20_transfer",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0x0000000000000000000000000000000000000000",
+  "contract_from_arg": "asset",
+  "actions": {
+    "transfer": {
+      "function": "transfer(address,uint256)",
+      "payload_args": [
+        { "name": "to",     "source": "from_address" },
+        { "name": "amount", "source": "amount_wei" }
+      ]
+    }
+  }
+}

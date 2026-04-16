@@ -1,0 +1,23 @@
+{
+  "protocol": "lido",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452",
+  "actions": {
+    "wrap": {
+      "function": "wrap(uint256)",
+      "payload_args": [
+        { "name": "_stETHAmount", "source": "amount_wei" }
+      ],
+      "approvals": [
+        { "token": "stETH", "spender": "contract" }
+      ]
+    },
+    "unwrap": {
+      "function": "unwrap(uint256)",
+      "payload_args": [
+        { "name": "_wstETHAmount", "source": "amount_wei" }
+      ]
+    }
+  }
+}

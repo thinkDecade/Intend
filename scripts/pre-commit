@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Intend pre-commit hook — secret detection via gitleaks
+# Install: bash scripts/install-hooks.sh
+
+set -euo pipefail
+
+# ── 1. gitleaks scan ─────────────────────────────────────────────────────
+if command -v gitleaks &>/dev/null; then
+  echo "[pre-commit] Running gitleaks on staged files…"
+  gitleaks protect --staged --config .gitleaks.toml --redact
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "  COMMIT BLOCKED — gitleaks detected a secret in staged files."
+    echo "  Remove or rotate the credential before committing."
+    echo "  If this is a false positive, add it to .gitleaks.toml [allowlist]."
+    echo ""
+    exit 1
+  fi
+  echo "[pre-commit] gitleaks: clean"
+else
+  # gitleaks not installed — run a basic regex scan as fallback
+  echo "[pre-commit] gitleaks not found — running basic secret pattern scan…"
+
+  STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+  if [ -z "$STAGED" ]; then exit 0; fi
+
+  # Patterns that should never appear in committed files
+  PATTERNS=(
+    'ANTHROPIC_API_KEY\s*=\s*sk-ant-[A-Za-z0-9]'
+    'OPENAI_API_KEY\s*=\s*sk-[A-Za-z0-9]'
+    'CDP_API_KEY_SECRET\s*=\s*[A-Za-z0-9/+]{20}'
+    'CDP_WALLET_SECRET\s*=\s*[A-Za-z0-9/+]{20}'
+    'TELEGRAM_BOT_TOKEN\s*=\s*[0-9]{8,}:'
+    'SUPABASE_SERVICE_ROLE_KEY\s*=\s*eyJ'
+    'UPSTASH_REDIS_REST_TOKEN\s*=\s*[A-Za-z0-9]'
+  )
+
+  FOUND=0
+  for FILE in $STAGED; do
+    [ -f "$FILE" ] || continue
+    for PAT in "${PATTERNS[@]}"; do
+      if git show ":$FILE" | grep -qE "$PAT" 2>/dev/null; then
+        echo "  BLOCKED: Possible secret in $FILE (pattern: $PAT)"
+        FOUND=1
+      fi
+    done
+  done
+
+  if [ $FOUND -ne 0 ]; then
+    echo ""
+    echo "  COMMIT BLOCKED — possible secret detected."
+    echo "  Install gitleaks for full coverage: https://github.com/gitleaks/gitleaks"
+    echo ""
+    exit 1
+  fi
+  echo "[pre-commit] Basic scan: clean"
+fi
+
+exit 0

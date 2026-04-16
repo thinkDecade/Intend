@@ -2,8 +2,8 @@
   "name": "@intend/execution",
   "version": "0.5.0",
   "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "lint": "eslint src/",
@@ -11,11 +11,16 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@intend/core": "workspace:*",
-    "@intend/decision": "workspace:*",
-    "@intend/skills": "workspace:*",
-    "@intend/data": "workspace:*",
-    "@coinbase/agentkit": "latest"
+    "@coinbase/agentkit": "^0.10.4",
+    "@intend/core": "*",
+    "@intend/data": "*",
+    "@intend/decision": "*",
+    "@intend/signals": "*",
+    "@intend/skills": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "graphql": "^16.13.2",
+    "jose": "^5.0.0",
+    "viem": "^2.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",

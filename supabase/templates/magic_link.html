@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in to Intend</title>
+</head>
+<body style="margin:0;padding:0;background:#1A1612;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 20px;">
+    <tr>
+      <td align="center">
+        <table width="440" cellpadding="0" cellspacing="0" style="background:#252019;border-radius:16px;padding:44px 40px;border:1px solid rgba(212,162,74,0.12);">
+
+          <!-- Mark + Wordmark -->
+          <tr>
+            <td style="padding-bottom:32px;">
+              <span style="font-family:Georgia,'Times New Roman',serif;font-size:20px;font-style:italic;font-weight:400;color:#F5EFE4;letter-spacing:0.2em;">intend</span>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="font-size:15px;color:#8A7A6A;line-height:1.6;padding-bottom:28px;">
+              Enter this code to sign in:
+            </td>
+          </tr>
+
+          <!-- OTP Code -->
+          <tr>
+            <td align="center" style="padding-bottom:32px;">
+              <div style="font-size:38px;font-weight:600;letter-spacing:10px;color:#D4A24A;font-family:'Courier New',Consolas,monospace;background:#1A1612;border-radius:12px;padding:18px 28px;display:inline-block;border:1px solid rgba(212,162,74,0.15);">
+                {{ .Token }}
+              </div>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding-bottom:24px;">
+              <div style="height:1px;background:rgba(138,122,106,0.2);"></div>
+            </td>
+          </tr>
+
+          <!-- Alternative -->
+          <tr>
+            <td style="font-size:13px;color:#8A7A6A;line-height:1.5;padding-bottom:20px;">
+              Or sign in directly:
+            </td>
+          </tr>
+
+          <!-- Button -->
+          <tr>
+            <td align="center" style="padding-bottom:36px;">
+              <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 36px;background:#D4A24A;color:#1A1612;text-decoration:none;border-radius:10px;font-size:14px;font-weight:600;letter-spacing:0.02em;">
+                Sign in to Intend
+              </a>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="font-size:12px;color:#8A7A6A;line-height:1.5;border-top:1px solid rgba(138,122,106,0.15);padding-top:24px;">
+              This code expires in 1 hour. If you didn't request this, ignore this email.
+            </td>
+          </tr>
+
+        </table>
+
+        <!-- Brand footer -->
+        <table width="440" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="padding-top:24px;font-size:11px;color:#8A7A6A;font-family:Georgia,'Times New Roman',serif;font-style:italic;letter-spacing:0.15em;">
+              your money, executing your intentions.
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

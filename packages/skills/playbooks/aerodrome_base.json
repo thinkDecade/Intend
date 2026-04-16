@@ -1,0 +1,44 @@
+{
+  "protocol": "aerodrome",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43",
+  "actions": {
+    "swap_exact_tokens_for_tokens": {
+      "function": "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
+      "payload_args": [
+        { "name": "amountIn",     "source": "amount_wei" },
+        { "name": "amountOutMin", "source": "amount_wei" },
+        { "name": "path",         "source": "from_address" },
+        { "name": "to",           "source": "from_address" },
+        { "name": "deadline",     "value": 0 }
+      ],
+      "approvals": [
+        { "token": "asset_from", "spender": "contract" }
+      ]
+    },
+    "swap_exact_eth_for_tokens": {
+      "function": "swapExactETHForTokens(uint256,address[],address,uint256)",
+      "payload_args": [
+        { "name": "amountOutMin", "source": "amount_wei" },
+        { "name": "path",         "source": "from_address" },
+        { "name": "to",           "source": "from_address" },
+        { "name": "deadline",     "value": 0 }
+      ],
+      "value": "native_amount"
+    },
+    "swap_exact_tokens_for_eth": {
+      "function": "swapExactTokensForETH(uint256,uint256,(address,address,bool,address)[],address,uint256)",
+      "payload_args": [
+        { "name": "amountIn",     "source": "amount_wei" },
+        { "name": "amountOutMin", "source": "amount_wei" },
+        { "name": "routes",       "source": "from_address" },
+        { "name": "to",           "source": "from_address" },
+        { "name": "deadline",     "value": 0 }
+      ],
+      "approvals": [
+        { "token": "asset_from", "spender": "contract" }
+      ]
+    }
+  }
+}

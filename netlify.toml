@@ -1,0 +1,16 @@
+[build]
+  command       = "npx turbo build --filter=@intend/web"
+  publish       = "apps/web/.next"
+  base          = "."
+
+[build.environment]
+  NODE_VERSION  = "22"
+  YARN_VERSION  = "1.22.22"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[dev]
+  command   = "yarn workspace @intend/web dev"
+  port      = 3000
+  targetPort = 3000

@@ -1,0 +1,31 @@
+{
+  "protocol": "morpho",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+  "actions": {
+    "supply": {
+      "function": "supply((address,address,address,address,uint256),uint256,uint256,address,bytes)",
+      "payload_args": [
+        { "name": "marketParams", "source": "from_address" },
+        { "name": "assets",       "source": "amount_wei" },
+        { "name": "shares",       "value": 0 },
+        { "name": "onBehalf",     "source": "from_address" },
+        { "name": "data",         "value": "0x" }
+      ],
+      "approvals": [
+        { "token": "asset", "spender": "contract" }
+      ]
+    },
+    "withdraw": {
+      "function": "withdraw((address,address,address,address,uint256),uint256,uint256,address,address)",
+      "payload_args": [
+        { "name": "marketParams", "source": "from_address" },
+        { "name": "assets",       "source": "amount_wei_or_max" },
+        { "name": "shares",       "value": 0 },
+        { "name": "onBehalf",     "source": "from_address" },
+        { "name": "receiver",     "source": "from_address" }
+      ]
+    }
+  }
+}

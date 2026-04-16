@@ -1,0 +1,26 @@
+{
+  "protocol": "uniswap_v3",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0x2626664c2603336E57B271c5C0b26F421741e481",
+  "actions": {
+    "exact_input_single": {
+      "function": "exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))",
+      "payload_args": [
+        { "name": "params", "source": "from_address" }
+      ],
+      "approvals": [
+        { "token": "asset_from", "spender": "contract" }
+      ]
+    },
+    "exact_output_single": {
+      "function": "exactOutputSingle((address,address,uint24,address,uint256,uint256,uint160))",
+      "payload_args": [
+        { "name": "params", "source": "from_address" }
+      ],
+      "approvals": [
+        { "token": "asset_from", "spender": "contract" }
+      ]
+    }
+  }
+}

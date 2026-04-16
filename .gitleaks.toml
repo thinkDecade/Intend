@@ -1,0 +1,56 @@
+# gitleaks configuration — Intend v0.5
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "Intend secret detection"
+
+[extend]
+# Use the default gitleaks ruleset as the base
+useDefault = true
+
+# ── Custom rules for Intend-specific credentials ─────────────────────────
+
+[[rules]]
+id          = "intend-supabase-service-key"
+description = "Supabase service role key"
+regex       = '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]{20,}'''
+tags        = ["supabase", "jwt"]
+
+[[rules]]
+id          = "intend-cdp-api-secret"
+description = "Coinbase CDP API secret"
+regex       = '''CDP_API_KEY_SECRET\s*=\s*[^\s]{20,}'''
+tags        = ["coinbase", "cdp"]
+
+[[rules]]
+id          = "intend-cdp-wallet-secret"
+description = "Coinbase CDP wallet secret"
+regex       = '''CDP_WALLET_SECRET\s*=\s*[^\s]{20,}'''
+tags        = ["coinbase", "cdp"]
+
+[[rules]]
+id          = "intend-telegram-token"
+description = "Telegram bot token"
+regex       = '''\d{8,10}:[A-Za-z0-9_-]{35}'''
+tags        = ["telegram"]
+
+[[rules]]
+id          = "intend-upstash-token"
+description = "Upstash Redis token"
+regex       = '''AX[A-Za-z0-9_-]{40,}'''
+tags        = ["upstash", "redis"]
+
+# ── Allowlist — safe patterns that look like secrets ─────────────────────
+
+[allowlist]
+description = "Intend global allowlist"
+paths       = [
+  '''.gitleaks.toml''',
+  '''yarn.lock''',
+  '''\.env\.example''',
+]
+regexes     = [
+  # Placeholder values in .env.example
+  '''=\s*$''',
+  # Test/example addresses
+  '''0x[0-9a-fA-F]{40}''',
+]

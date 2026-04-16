@@ -1,7 +1,7 @@
 -- ============================================================
 -- INTEND v0.5 — PRODUCTION DATABASE SCHEMA
 -- Migration: 001_initial_schema
--- Chain scope: Base (primary) + Arbitrum (yield layer)
+-- Chain scope: Base only
 -- ============================================================
 -- RULES:
 --   1. Never ALTER TABLE manually — always add a new migration
@@ -90,9 +90,7 @@ CREATE TYPE automation_level AS ENUM (
 
 CREATE TYPE chain_id AS ENUM (
   'base',           -- primary execution chain
-  'arbitrum',       -- yield layer only (GROW, SAVE)
-  'base_sepolia',   -- testnet
-  'arbitrum_sepolia' -- testnet
+  'base_sepolia'    -- testnet
 );
 
 CREATE TYPE wallet_provider AS ENUM (
@@ -102,12 +100,11 @@ CREATE TYPE wallet_provider AS ENUM (
 
 CREATE TYPE protocol_type AS ENUM (
   'wallet',         -- bare wallet, no protocol
-  'aave_v3',        -- Aave V3 lending
+  'aave_v3',        -- Aave V3 lending (Base)
   'aerodrome',      -- Aerodrome DEX (Base)
   'morpho',         -- Morpho lending (Base)
   'moonwell',       -- Moonwell lending (Base)
-  'camelot',        -- Camelot DEX (Arbitrum)
-  'uniswap_v3',     -- Uniswap V3
+  'uniswap_v3',     -- Uniswap V3 (Base)
   'x402'            -- x402 micropayment
 );
 
@@ -127,7 +124,6 @@ CREATE TYPE asset_symbol AS ENUM (
   'sUSDe',
   'USDY',
   -- DeFi
-  'ARB',
   'WETH',
   -- Local fiat (off-chain delivery)
   'GHS',
@@ -392,7 +388,7 @@ CREATE INDEX idx_intents_raw_input_trgm ON intents
 
 -- ============================================================
 -- TABLE: positions
--- Active yield, investment, and staking positions.
+-- Active yield, investment, and staking positions on Base.
 -- ============================================================
 
 CREATE TABLE positions (
@@ -659,7 +655,6 @@ CREATE TABLE signal_snapshots (
   real_interest_rate NUMERIC(8,4),             -- nominal - inflation
 
   best_apy_base     NUMERIC(8,4),              -- best safe yield on Base
-  best_apy_arb      NUMERIC(8,4),              -- best safe yield on Arbitrum
 
   -- Computed scores
   fx_signal         NUMERIC(4,3),              -- 0.0 to 1.0
@@ -1041,7 +1036,7 @@ COMMENT ON TABLE intents IS
   'Full lifecycle record for every user intention across all channels.';
 
 COMMENT ON TABLE positions IS
-  'Active yield, investment, and staking positions on Base and Arbitrum.';
+  'Active yield, investment, and staking positions on Base.';
 
 COMMENT ON TABLE life_horizons IS
   'Named financial goals for the SAVE primitive.';

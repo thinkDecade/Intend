@@ -213,6 +213,17 @@ systemctl --user restart openclaw-gateway
 - Staging before production — no exceptions, not for a small fix
 - `supabase/migrations/` — numbered SQL files only, never manual ALTER TABLE
 
+### Build Direction
+- `BUILD_PLAN.md` at the project root is the source of truth for the current build direction
+- Before starting any session, read BUILD_PLAN.md to understand which phase is active and what is done
+- Tick off completed checklist items in BUILD_PLAN.md as work is completed
+
+### Documentation (Mandatory After Every Phase)
+- After every phase in BUILD_PLAN.md completes, update `DOCUMENTATION.md` before moving to the next phase
+- No phase is done until DOCUMENTATION.md reflects it
+- This file contains the comprehensive technical documentation of every package, route, type, and integration
+- Keep sections current: routes, functions, env vars, deployment status, known gaps, active primitives
+
 ### Disk Hygiene
 - Weekly journal vacuum cron already configured at `/etc/cron.d/journal-vacuum`
 - PM2 log rotation configured
