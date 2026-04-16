@@ -216,20 +216,33 @@ User speaks freely (any language, any phrasing)
 
 ### Phase 6 — Netlify Deployment
 
-- [ ] Configure `netlify.toml` at root
-- [ ] Set all env vars in Netlify dashboard (migrate from Vercel)
-- [ ] Update `apps/web/next.config.mjs` if needed for Netlify runtime
-- [ ] Deploy and verify: all four routes, auth flow, chat, API endpoints
-- [ ] Update DNS if domain needs rewiring
+- [x] `netlify.toml` configured at root — build command, publish dir, plugin, Node 22
+- [x] `next.config.mjs` updated — `serverExternalPackages` for AgentKit/viem, NEXT_TELEMETRY_DISABLED
+- [ ] Set all env vars in Netlify dashboard — required before deploy works:
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+  - `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`
+  - `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`
+  - `EXCHANGE_RATE_API_KEY`, `COINMARKETCAP_API_KEY`, `BASE_SEPOLIA_RPC_URL`
+  - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`
+- [ ] Trigger deploy and verify: all four routes, auth flow, chat, API endpoints
+- [ ] Update DNS if custom domain needs rewiring
 - [ ] Update DOCUMENTATION.md
 
 ---
 
-### Phase 7 — Landing Page + Final Polish
+### Phase 7 — Landing Page + Final Polish ✅
 
-- [ ] Update landing page — 4 primitives, dual execution mode messaging, PROTECT intelligence angle
-- [ ] Remove WhatsApp "coming soon" (replaced with honest "Telegram + Web for v0.5")
-- [ ] Full end-to-end smoke test: Telegram + Web, both execution modes, all 4 primitives
+- [x] Update landing page — 4 active primitives (PROTECT, CONVERT, SEND, SPEND)
+- [x] PROTECT card: proactive intelligence angle ("Intend watches around the clock")
+- [x] Execution modes section: Semi-Autonomous (default) vs Autonomous with trigger phrases
+- [x] Showcase: proactive PROTECT alert with FX change %, inflation, "Protect →" / "Not now"
+- [x] Hero subtitle: "smartest financial concierge" + proactive guardian angle
+- [x] Stats: 4 primitives + 6h monitoring (was 8 primitives + 3 channels)
+- [x] Channels: Telegram + Web (live), WhatsApp (visually dimmed, "· soon")
+- [x] Primitive grid: 2-column layout for 4 items
+- [x] All new CSS: execution mode cards, dismiss button, proactive alert styling
+- [ ] Full end-to-end smoke test: Telegram + Web, both execution modes, all 4 primitives (requires live deploy)
 - [ ] Update DOCUMENTATION.md
 
 ---
