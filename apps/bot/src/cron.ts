@@ -1,16 +1,22 @@
 /**
- * intend-cron — Confirmation reminder scheduler
+ * intend-cron — Scheduler for reminders and proactive intelligence
  *
  * PM2 process: intend-cron
- * Runs every 60 seconds. Responsibilities:
+ *
+ * Tick (every 60 seconds):
  *   1. Send due confirmation reminders (T+5, T+20, T+35)
  *   2. Expire intents that have been in 'confirmed' state > 40 minutes
+ *
+ * Protect scan (every 6 hours):
+ *   3. Run PROTECT proactive monitor — check hedge scores per region,
+ *      alert users with unprotected savings when threshold crossed (0.65+)
  *
  * Designed to be idempotent — safe to restart at any time.
  */
 
 import TelegramBot from 'node-telegram-bot-api';
 import { getDueReminders, markReminderSent, getExpiredIntents, logEvent, getSupabase } from '@intend/data';
+import { runProtectMonitor } from './proactive-monitor.js';
 
 const TOKEN = process.env['TELEGRAM_BOT_TOKEN'];
 if (!TOKEN) throw new Error('[intend-cron] TELEGRAM_BOT_TOKEN is required');
@@ -18,7 +24,8 @@ if (!TOKEN) throw new Error('[intend-cron] TELEGRAM_BOT_TOKEN is required');
 // Send-only bot instance — no polling, no webhooks
 const bot = new TelegramBot(TOKEN);
 
-const POLL_INTERVAL_MS = 60_000; // 1 minute
+const POLL_INTERVAL_MS         = 60_000;       // 1 minute — reminder scheduler
+const PROTECT_SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours — PROTECT monitor
 
 // ── Reminder sender ───────────────────────────────────────────────────────
 
@@ -118,8 +125,27 @@ async function tick(): Promise<void> {
   }
 }
 
-console.log('[intend-cron] Starting — polling every 60s');
+// ── Protect scan wrapper ───────────────────────────────────────────────────
 
-// Run immediately on startup, then on interval
+async function protectScan(): Promise<void> {
+  try {
+    await runProtectMonitor(bot);
+  } catch (err) {
+    console.error('[intend-cron] Protect scan error:', err);
+  }
+}
+
+// ── Startup ───────────────────────────────────────────────────────────────
+
+console.log('[intend-cron] Starting — reminder tick every 60s, protect scan every 6h');
+
+// Reminder loop: runs every 60 seconds
 tick();
 setInterval(tick, POLL_INTERVAL_MS);
+
+// PROTECT monitor: runs every 6 hours.
+// Delay first run by 30 seconds to let the process warm up.
+setTimeout(() => {
+  protectScan();
+  setInterval(protectScan, PROTECT_SCAN_INTERVAL_MS);
+}, 30_000);

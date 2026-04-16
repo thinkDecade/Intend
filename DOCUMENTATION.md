@@ -1,7 +1,7 @@
 # INTEND v0.5 — Technical Documentation
 
-> Last updated: 2026-04-16
-> Status: Active build — revised direction per BUILD_PLAN.md
+> Last updated: 2026-04-16 (Phases 2–5 complete)
+> Status: Active build — Phase 6 (Netlify deploy) + Phase 7 (landing page) remaining
 > Web: https://intendfinance.netlify.app
 > Build Plan: `BUILD_PLAN.md` (source of truth for current build direction)
 
@@ -317,18 +317,25 @@ The UFM is rebuilt on every pipeline execution and injected into the LLM system 
     local_currency: string,           // GHS, TRY, BRL, etc.
     fx_rate: number,                  // Local currency per USD
     fx_trend: 'weakening' | 'stable' | 'strengthening',
-    fx_change_30d: number,            // Percentage
+    fx_change_30d: number,            // Percentage (negative = weakening)
     inflation_rate: number,           // Annual %
-    hedge_score: number,              // 0.0 - 1.0
+    hedge_score: number,              // 0.0–1.0 (live, from hedge-score engine)
     best_apy: number,                 // Best available yield
-    current_apy: number | null,       // User's current yield
+    current_apy: number | null,       // User's current yield if deployed
+    // Phase 3 — PROTECT Intelligence
+    forward_signal: {                 // Where the economic environment is heading
+      direction: 'deteriorating' | 'stable' | 'improving',
+      score_delta: number,            // Positive = getting worse
+      acceleration: 'rapid' | 'gradual' | 'stable',
+    } | null,
   },
   identity: {
-    automation_level: 'suggest' | 'assisted' | 'autonomous',
+    execution_mode: 'autonomous' | 'semi_autonomous',  // (was: automation_level)
     preferred_channel: 'telegram' | 'whatsapp' | 'web',
     kyc_tier: 'tier_0' | 'tier_1' | 'tier_2' | 'tier_3',
     max_auto_tx_usd: number,
     intend_handle: string | null,
+    require_confirm_new_recipient: boolean,
   },
 }
 ```
@@ -377,19 +384,19 @@ The UFM is rebuilt on every pipeline execution and injected into the LLM system 
 
 ### Context Interpreter
 
-`interpretIntent(rawInput, ufm)` classifies user messages into structured IntentionObjects using `generateObject()` with Zod validation.
+Two exported functions:
 
-**Classification rules (applied in order):**
-1. SAVE: named goal, target amount, or deadline
-2. GROW: undirected yield ("grow my money", "earn interest")
-3. INVEST: conviction holding ("buy ETH", "I'm bullish")
-4. PROTECT: fear/preservation ("shield from inflation")
-5. CONVERT: neutral exchange ("swap ETH for USDC")
-6. MOVE: person-to-person ("send $300 to my brother")
-7. SPEND: person-to-merchant ("pay Netflix")
-8. EARN: inbound detected ("I just got paid")
+**`detectModeSwitch(rawInput)`** — pure regex, runs before any LLM call. Returns `'autonomous' | 'semi_autonomous' | null`. Used in pipeline.ts and web chat route to intercept mode changes instantly with zero latency.
 
-**Confidence threshold:** >= 0.75 to proceed, < 0.75 triggers clarification question.
+Triggers: "go autonomous", "full auto", "just do it", "don't ask me", "ask me before", "switch to semi", "always confirm", etc.
+
+**`interpretIntent(rawInput, ufm)`** — open reasoning approach. Asks "What does this person want their money to do?" rather than matching keywords. Uses `generateObject()` with Zod validation.
+
+**Active primitives (v0.5):** PROTECT, CONVERT, MOVE, SPEND. Disabled: GROW, SAVE, EARN, INVEST.
+
+**Assumptions layer:** Intend states what it understood rather than asking for missing parameters. Clarification only fires when: (1) primitive itself is genuinely ambiguous AND (2) consequence is irreversible.
+
+**Confidence threshold:** >= 0.75 to proceed, < 0.75 triggers exactly one clarifying question.
 
 ### UFM Builder
 
@@ -398,8 +405,13 @@ The UFM is rebuilt on every pipeline execution and injected into the LLM system 
 **Required signals:**
 - FX signal: `getFxSignalStrict(region)` — rates + inflation
 - APY signal: `getApySignalStrict()` — best yields
+- Hedge signal: `getHedgeSignal(region)` — non-fatal, degrades gracefully
 
-**Staleness enforcement:** If any signal exceeds 2x TTL, throws `SignalStaleError`. Both signals gracefully fetch live data if cache is empty.
+**Computed:** `forward_signal` (Phase 3) — derived from FX trend + 30d rate of change. No historical data needed.
+
+**`hedge_score`** is now live (was a `0` placeholder before Phase 3). Populated from `getHedgeSignal()`.
+
+**Staleness enforcement:** If FX or APY exceeds 2x TTL, throws `SignalStaleError`. Hedge signal failure is non-fatal (returns score 0).
 
 ### Confirmation Engine
 
@@ -442,6 +454,33 @@ All strategies return an `ExecutionPlan` with steps, fees, timing, and confirmat
 
 `executeAtomic(steps, context)` — all-or-nothing execution with rollback snapshots on failure.
 
+### dispatch() — Action Dispatcher
+
+`dispatch(plan, provider, channel, balanceSnapshot?)` — dispatches a confirmed ExecutionPlan through the atomicity wrapper.
+
+- `balanceSnapshot` is now a required parameter (Phase 5 fix) — caller must read fresh on-chain balances before dispatch
+- Web confirm route reads balances → builds snapshot → passes to dispatch
+- Telegram callback does the same in `handlers/callbacks.ts`
+
+### Conflict Resolver (Phase 5)
+
+`packages/execution/src/conflict-resolver.ts`
+
+- `checkConflict(incoming, activePlans)` — detects asset overlap between plans
+- `assertNoConflict(incoming, activePlans)` — throws `PlanConflictError` with user-facing message if conflict found
+- `extractConsumedAssets(plan)` — extracts source asset list from plan steps
+- `PlanConflictError` — thrown with: "Your Send plan is currently executing — wait for it to complete"
+
+### Protocol Health Check (Phase 5)
+
+`checkProtocolHealth(protocol, chain)` in `agentkit/yield.ts` — now live with DefiLlama API.
+
+Checks before every yield deposit:
+1. **TVL ≥ $10M** — rejects if below threshold
+2. **TVL drop guard** — rejects if TVL dropped >30% in 24h (exploit/bank-run signal)
+3. **Allowlist** — only `aave_v3`, `morpho`, `moonwell` pass
+4. **Testnet fallback** — network errors pass in non-production; fail closed in production
+
 ### Payment Rails
 
 - **Crypto Checkout:** Direct transfer + claim-based payouts, 6-char address confirmation on >$200 transactions
@@ -459,6 +498,8 @@ All strategies return an `ExecutionPlan` with steps, fees, timing, and confirmat
 | Prices | CoinMarketCap | 15m | 30m | `intend:price:{asset}` |
 | Gas | Base RPC | 5m | 10m | `intend:gas:base` |
 | Hedge Score | Computed | 4h | 8h | `intend:hedge:{region}` |
+| Plan Cache | Redis (short-lived) | 40m | — | `intend:plan:{intent_id}` |
+| Protect Cooldown | Redis flag | 24h | — | `intend:protect:cooldown:{user_id}` |
 
 **Staleness rule:** Display uses cached values within TTL. Execution ALWAYS fetches fresh (prices, gas). If any signal exceeds 2x TTL during pipeline, abort with user-facing message.
 
@@ -619,12 +660,39 @@ Premium dark-themed landing page inspired by awsmd.com design patterns. Client c
 ### Pipeline
 
 ```
-Message → getUserByTelegramId → loadSession(redis)
-  → interpretIntent(text, ufm)
+Message
+  → Step 0: detectModeSwitch() [regex, no LLM — handles "go autonomous", "ask me first"]
+  → getUserByTelegramId → loadSession(redis)
+  → buildUFM(userId, { balances, positions, goals, pending })
+  → interpretIntent(text, ufm)    [open reasoning, assumptions layer]
   → generatePlan(intention, ufm, ctx)
+  → checkPermission() [semi: always confirm, PROTECT: always confirm, autonomous: skip]
   → generateConfirmationMessage(plan, ufm)
   → Send preview with [Confirm] [Cancel] inline keyboard
 ```
+
+### Proactive Monitor (Phase 3)
+
+`apps/bot/src/proactive-monitor.ts` — PROTECT intelligence module.
+
+**Invocation:** Wired to `intend-cron` process, runs every 6 hours (30s warmup delay on startup).
+
+**Algorithm:**
+1. Load all active users with Telegram linked (`getAllActiveUsersWithTelegram()`)
+2. Group by region — one signal fetch per region (not per user)
+3. For each region: `getHedgeSignal(region)` + `getFxSignal(region)`
+4. If `hedge_score >= 0.65`: check 24h cooldown per user (`intend:protect:cooldown:{userId}`)
+5. If no cooldown: fire proactive alert via Telegram with `protect_alert:accept` / `protect_alert:dismiss` buttons
+6. Set 24h cooldown in Redis after alert sent
+
+**Alert message format:**
+- Shows FX change % and/or inflation rate
+- "Protect my savings →" and "Not now" inline keyboard
+- Cooldown key: `intend:protect:cooldown:{userId}` — 24h TTL
+
+**Callback handling:**
+- `protect_alert:accept` → pipeline with synthetic message `"protect my savings"`
+- `protect_alert:dismiss` → "No problem — I'll keep watching."
 
 ### Session State Machine
 
@@ -833,37 +901,51 @@ All of the above plus:
 
 ---
 
-## 21. Known Gaps & Phase 2
+## 21. Known Gaps & Post-v0.5
 
-### Working Now (v0.5)
+### Working Now (Phases 0–5 complete)
 
-- All 8 primitives classified and planned end-to-end
+- 4 active primitives: PROTECT, CONVERT, MOVE (Send), SPEND
+- 4 gated primitives: GROW, SAVE, EARN, INVEST (friendly "coming in next version" message)
+- Two execution modes: Autonomous + Semi-Autonomous, switchable via settings and conversation
+- PROTECT hardcoded semi-autonomous (invariant)
+- PROTECT proactive monitor: hedge score threshold, 6h poll, 24h cooldown, FX/inflation alert
+- `forward_signal` in UFM — economic trajectory context
+- Mode-switch detection: regex pre-filter before LLM (zero latency)
+- Open reasoning context interpreter + assumptions layer
+- Live `hedge_score` in UFM (was placeholder 0)
+- Web confirm route now dispatches (Plan cached in Redis 40min, dynamic import of execution layer)
+- `balance_snapshot` populated before dispatch (Telegram + Web)
+- Conflict resolver: `checkConflict()`, `assertNoConflict()`, `PlanConflictError`
+- `checkProtocolHealth()`: live DefiLlama TVL check, ≥$10M + 30% drop guard
 - 3 channels: Web (live), Telegram (live), WhatsApp (skeleton)
-- Multi-model AI with automatic fallback
-- Base-only execution
-- OTP auth with branded emails
+- OTP auth + branded emails
 - Streaming chat with plan preview
-- Settings persistence
+- Settings persistence (execution mode toggle)
 
-### Known Gaps
+### Remaining (Phases 6–7)
 
-| Gap | Status | Notes |
-|-----|--------|-------|
-| On-chain balance display | Placeholder | `/api/portfolio` returns 0 for wallet balance; needs AgentKit integration |
-| Execution dispatch | Not wired | Confirm button records status but doesn't call `executeAtomic()` |
-| Right panel stats | Zeros | Depends on portfolio API having real balance data |
-| History page filtering | Basic | No date range or primitive filter UI |
-| Cross-channel handoff | Designed, not tested | Redis → Supabase sync exists but untested |
+| Item | Phase | Notes |
+|------|-------|-------|
+| Netlify env vars | Phase 6 | Set in Netlify dashboard — requires Supabase/Redis/AI keys |
+| DNS verification | Phase 6 | `intendfinance.netlify.app` already live, custom domain pending |
+| Landing page update | Phase 7 | 4 primitives (not 8), dual execution mode, PROTECT intelligence |
+| WhatsApp "coming soon" | Phase 7 | Replace "connected" with honest state |
+| End-to-end smoke test | Phase 7 | Both channels, both modes, all 4 primitives |
+| OpenClaw gateway wiring | Post-Phase 4 | WORKSPACE.md updated; HTTP gateway requires VM SSH access |
+| On-chain balance display | v0.6 | `/api/portfolio` returns 0 for wallet balance |
+| History page filtering | v0.6 | No date range or primitive filter UI |
+| Cross-channel handoff | v0.6 | Redis → Supabase sync exists but untested end-to-end |
 
-### Phase 2 (Deferred)
+### Post-v0.5 (Explicitly Deferred)
 
-- Proactive monitoring loop
-- Arbitrum yield layer
-- Multiple offramp partners per corridor
-- Visa interchange revenue
+- SEND fiat rails (Flutterwave NGN/GHS, Wise GBP/CNY) — depends on funding
+- WhatsApp full pipeline (stub exists)
+- GROW, SAVE, EARN, INVEST primitives
 - KYC Tier 2/3
-- Mobile app (Phase 4)
-- WhatsApp full integration
+- Yellow Card crypto-to-fiat Africa corridor
+- Arbitrum yield layer
+- Mobile app
 
 ---
 

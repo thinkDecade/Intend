@@ -26,7 +26,9 @@ export const TTL = {
   PRICES:          900, // 15 minutes
   GAS:             300, // 5 minutes
   HEDGE_SCORE: 14_400, // 4 hours
-  SESSION:      3_600, // 1 hour (durable backup to Supabase)
+  SESSION:              3_600, // 1 hour (durable backup to Supabase)
+  PROTECT_ALERT_COOLDOWN: 86_400, // 24 hours — don't re-alert same user same day
+  PLAN_CACHE:              2_400, // 40 minutes — matches confirmation expiry window
 } as const;
 
 // ── Max ages (2× TTL) — staleness limit before pipeline abort ─────────────
@@ -40,12 +42,20 @@ export const MAX_AGE_MS = {
 
 // ── Key helpers ───────────────────────────────────────────────────────────
 export const keys = {
-  fx:         (region: string, currency: string) => `intend:fx:${region}:${currency}`,
-  apy:        ()                                 => `intend:apy:protocols`,
-  price:      (asset: string)                    => `intend:price:${asset.toLowerCase()}`,
-  gas:        ()                                 => `intend:gas:base`,
-  hedgeScore: (region: string)                   => `intend:hedge:${region}`,
-  session:    (channel: string, channelId: string) => `intend:session:${channel}:${channelId}`,
+  fx:                   (region: string, currency: string) => `intend:fx:${region}:${currency}`,
+  apy:                  ()                                 => `intend:apy:protocols`,
+  price:                (asset: string)                    => `intend:price:${asset.toLowerCase()}`,
+  gas:                  ()                                 => `intend:gas:base`,
+  hedgeScore:           (region: string)                   => `intend:hedge:${region}`,
+  session:              (channel: string, channelId: string) => `intend:session:${channel}:${channelId}`,
+  /** Cooldown flag — prevents repeat PROTECT alerts within 24h for the same user. */
+  protectAlertCooldown: (userId: string)                   => `intend:protect:cooldown:${userId}`,
+  /**
+   * Short-lived cache for ExecutionPlan objects.
+   * Written by chat route when plan is generated; read by confirm route on dispatch.
+   * TTL matches confirmation expiry window (40 minutes).
+   */
+  planCache: (intentId: string)                            => `intend:plan:${intentId}`,
 } as const;
 
 // ── Typed cache helpers ───────────────────────────────────────────────────

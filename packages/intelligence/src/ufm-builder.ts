@@ -8,13 +8,62 @@
  *   - If any required signal is stale: abort with user-facing message
  */
 
-import type { UserFinancialModel, Balance, PendingConfirmation, Goal, Position } from '@intend/core';
+import type { UserFinancialModel, Balance, PendingConfirmation, Goal, Position, ForwardSignal } from '@intend/core';
 import { getUserById } from '@intend/data';
 import {
   getFxSignalStrict,
   getBestApy,
   getApySignalStrict,
+  getHedgeSignal,
+  computeHedgeScore,
+  type HedgeComponents,
 } from '@intend/signals';
+import type { FxSignal } from '@intend/signals';
+
+/**
+ * Derive a ForwardSignal from FX data — describes where the regional
+ * economic environment is heading, not just where it is today.
+ *
+ * Direction:
+ *   deteriorating = fx weakening + meaningful change
+ *   improving     = fx strengthening
+ *   stable        = everything else
+ *
+ * Acceleration:
+ *   rapid   = > 10% absolute 30d change
+ *   gradual = 3–10% absolute 30d change
+ *   stable  = < 3%
+ */
+function computeForwardSignal(fx: FxSignal): ForwardSignal {
+  const absChange = Math.abs(fx.fx_change_30d);
+
+  let direction: ForwardSignal['direction'];
+  if (fx.fx_trend === 'weakening' && fx.fx_change_30d < -2) {
+    direction = 'deteriorating';
+  } else if (fx.fx_trend === 'strengthening' && fx.fx_change_30d > 2) {
+    direction = 'improving';
+  } else {
+    direction = 'stable';
+  }
+
+  let acceleration: ForwardSignal['acceleration'];
+  if (absChange > 10) {
+    acceleration = 'rapid';
+  } else if (absChange > 3) {
+    acceleration = 'gradual';
+  } else {
+    acceleration = 'stable';
+  }
+
+  // Score delta: approximated from 30d FX change normalised to 0–1 range.
+  // Positive = things are getting worse.
+  const score_delta =
+    direction === 'deteriorating' ? Math.min(1, absChange / 20) :
+    direction === 'improving'     ? -Math.min(1, absChange / 20) :
+    0;
+
+  return { direction, score_delta, acceleration };
+}
 
 export class SignalStaleError extends Error {
   constructor(signal: string) {
@@ -57,13 +106,14 @@ export async function buildUFM(
   if (!user) throw new UserNotFoundError(userId);
 
   // 2. Load signals with strict staleness enforcement
-  const [fxSignal, apySignal] = await Promise.all([
+  const [fxSignal, apySignal, hedgeSignal] = await Promise.all([
     getFxSignalStrict(user.region).catch((err: Error) => {
       throw new SignalStaleError(`FX/${user.region}: ${err.message}`);
     }),
     getApySignalStrict().catch((err: Error) => {
       throw new SignalStaleError(`APY: ${err.message}`);
     }),
+    getHedgeSignal(user.region).catch(() => null), // non-fatal — degraded gracefully
   ]);
 
   const bestApy = apySignal.protocols.length > 0
@@ -99,9 +149,10 @@ export async function buildUFM(
       fx_trend:        fxSignal.fx_trend,
       fx_change_30d:   fxSignal.fx_change_30d,
       inflation_rate:  fxSignal.inflation_rate,
-      hedge_score:     0, // computed separately by getHedgeSignal — not needed in every pipeline call
+      hedge_score:     hedgeSignal?.score ?? 0,
       best_apy:        bestApy,
       current_apy:     currentApy,
+      forward_signal:  computeForwardSignal(fxSignal),
     },
     identity: {
       user_id:                     userId,

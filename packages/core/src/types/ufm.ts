@@ -34,6 +34,20 @@ export interface Position {
   opened_at:    string;
 }
 
+/**
+ * Forward-looking economic signal for a user's region.
+ * Derived from FX trend + rate of change — describes where the user's
+ * financial environment is heading, not just where it is now.
+ */
+export interface ForwardSignal {
+  /** Which direction is the economic environment moving? */
+  direction:    'deteriorating' | 'stable' | 'improving';
+  /** Approximate score delta (positive = worsening). Range 0–1. */
+  score_delta:  number;
+  /** How fast is the change happening? */
+  acceleration: 'rapid' | 'gradual' | 'stable';
+}
+
 export interface UserFinancialModel {
   user_id: string;
 
@@ -52,9 +66,16 @@ export interface UserFinancialModel {
     fx_trend:        'weakening' | 'stable' | 'strengthening';
     fx_change_30d:   number;   // percentage, negative = weakening
     inflation_rate:  number;   // annual percentage
-    hedge_score:     number;   // 0.0 to 1.0
+    hedge_score:     number;   // 0.0 to 1.0, computed by hedge-score engine
     best_apy:        number;   // best available yield rate
     current_apy:     number | null;
+    /**
+     * Trajectory of the regional economic signal.
+     * Used by PROTECT strategy to surface timing context:
+     * "Things are getting worse fast" vs "slowly improving".
+     * Null if signals are unavailable.
+     */
+    forward_signal:  ForwardSignal | null;
   };
 
   identity: {

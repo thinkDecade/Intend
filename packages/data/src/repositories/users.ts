@@ -132,6 +132,22 @@ export async function updateLastActive(userId: string): Promise<void> {
   if (error) throw new Error(`[users] updateLastActive: ${error.message}`);
 }
 
+/**
+ * Return all active users that have a Telegram channel linked.
+ * Used by the proactive monitor to enumerate users for PROTECT alerts.
+ * Filters: is_active = true, telegram_id IS NOT NULL.
+ */
+export async function getAllActiveUsersWithTelegram(): Promise<UserRow[]> {
+  const { data, error } = await getSupabase()
+    .from('users')
+    .select('*')
+    .eq('is_active', true)
+    .not('telegram_id', 'is', null);
+
+  if (error) throw new Error(`[users] getAllActiveUsersWithTelegram: ${error.message}`);
+  return (data ?? []) as UserRow[];
+}
+
 export async function updateUserSettings(
   userId: string,
   settings: {

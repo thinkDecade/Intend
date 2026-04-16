@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
-import { getUserById, getActiveGoals, getActivePositions, getPendingConfirmations, createIntent } from '@intend/data';
-import { buildUFM, interpretIntent, streamConfirmationMessage } from '@intend/intelligence';
+import { getUserById, getActiveGoals, getActivePositions, getPendingConfirmations, createIntent, cacheSet, keys, TTL } from '@intend/data';
+import { buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch } from '@intend/intelligence';
+import { updateUserSettings, logEvent } from '@intend/data';
 import { generatePlan } from '@intend/decision';
 import { isAddress } from 'viem';
 
@@ -27,6 +28,22 @@ export async function POST(req: NextRequest) {
 
   // userId from body must match authenticated session
   const userId = body.userId ?? '';
+
+  // ── Mode-switch detection (pre-LLM, regex only) ──────────────────────────
+  const newMode = detectModeSwitch(message);
+  if (newMode !== null) {
+    await updateUserSettings(userId, { execution_mode: newMode });
+    await logEvent({
+      user_id:    userId,
+      event_type: 'execution_mode_changed',
+      source:     'web',
+      event_data: { new_mode: newMode },
+    });
+    const modeMsg = newMode === 'autonomous'
+      ? `Got it. I'll execute immediately from now on — you'll receive a receipt after each action.`
+      : `Got it. I'll always show you the plan and wait for your confirmation before anything moves.`;
+    return NextResponse.json({ type: 'mode_switch', message: modeMsg });
+  }
 
   // 2. Stream response setup
   const encoder = new TextEncoder();
@@ -122,6 +139,9 @@ export async function POST(req: NextRequest) {
         // 8. Record intent in DB
         const intentRow = await createIntent(userId, 'web', intention);
         const fullPlan = { ...plan, plan_id: intentRow.intent_id, created_at: intentRow.created_at };
+
+        // 8b. Cache plan for confirm route (avoids re-running AI inference on confirmation)
+        await cacheSet(keys.planCache(intentRow.intent_id), fullPlan, TTL.PLAN_CACHE);
 
         // 9. Stream confirmation preview
         const textStream = await streamConfirmationMessage(fullPlan, ufm);

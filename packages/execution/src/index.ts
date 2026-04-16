@@ -18,3 +18,7 @@ export { executeAtomic, AtomicityError,
          BalanceMismatchError,
          type AtomicStep, type AtomicityContext,
          type AtomicResult, type StepResult }      from './atomicity-wrapper.js';
+export { checkConflict, assertNoConflict,
+         extractConsumedAssets, PlanConflictError,
+         type ConflictCheckResult,
+         type ActivePlanSummary }                  from './conflict-resolver.js';

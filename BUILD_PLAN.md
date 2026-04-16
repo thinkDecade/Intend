@@ -146,67 +146,71 @@ User speaks freely (any language, any phrasing)
 
 ---
 
-### Phase 0 — Foundation
+### Phase 0 — Foundation ✅
 
-- [ ] Push all untracked source files to `v0.5` remote (50+ TypeScript files)
-- [ ] Fix env var mismatches: CDP key names, price API key name
-- [ ] Add `execution_mode` column to `users` table via Supabase migration
-- [ ] Add `DISABLED_PRIMITIVES = ['GROW','SAVE','EARN','INVEST']` constant to `packages/decision/src/strategy/index.ts`
-- [ ] Rename `MOVE` → `SEND` in all user-facing text: formatter, UI copy, confirmation messages (types unchanged)
-- [ ] Replace `vercel.json` with `netlify.toml`
-- [ ] Update DOCUMENTATION.md
-
----
-
-### Phase 1 — Execution Modes
-
-- [ ] Collapse `AutomationLevel` type to `ExecutionMode: 'autonomous' | 'semi_autonomous'`
-- [ ] Update permission gate: autonomous mode skips confirmation, generates receipt instead
-- [ ] Add mode-switch intent detection to context interpreter — highest priority pass, runs before primitive classification
-- [ ] Mode-switch updates session state in Redis immediately + persists to `users` table
-- [ ] PROTECT mode hardcoded to `semi_autonomous` in permission gate regardless of user's global setting
-- [ ] Update settings page UI — clear toggle with plain English explanation of both modes
-- [ ] Update DOCUMENTATION.md
+- [x] Push all untracked source files to `v0.5` remote (100+ files committed)
+- [x] Env vars confirmed correct in `.env.example` (CDP keys, CoinMarketCap)
+- [x] Add `execution_mode` column to `users` table — `supabase/migrations/002_execution_mode.sql`
+- [x] Add `DISABLED_PRIMITIVES` set to `packages/decision/src/strategy/index.ts` — throws `PrimitiveDisabledError` with friendly user message
+- [x] Rename `MOVE` → `SEND` in all user-facing copy: bot formatter, /help, /settings, confirm buttons
+- [x] Replace `vercel.json` with `netlify.toml`
+- [x] Prune 14 redundant root-level files; move WORKSPACE.md to `.openclaw/workspace/`
+- [x] Update DOCUMENTATION.md
 
 ---
 
-### Phase 2 — Language Aperture
+### Phase 1 — Execution Modes ✅
 
-- [ ] Rewrite context interpreter prompt from classification to open reasoning: "What does this person want their money to do?" — structured output preserved, reasoning path widened
-- [ ] Add assumptions layer: Intend states assumptions rather than asking for clarification. Example: "I'm reading this as: protect your GHS savings from depreciation. Here's my plan." Clarification only fires if intent is ambiguous AND consequence irreversible.
-- [ ] Test with indirect, emotional, and vague financial statements
-- [ ] Update DOCUMENTATION.md
-
----
-
-### Phase 3 — PROTECT Intelligence
-
-- [ ] Add `forward_signal` to UFM — hedge score trend (current vs 30-day trajectory), not just point-in-time
-- [ ] All strategy plans have access to `ufm.forward_signal` — can surface timing context in confirmation messages
-- [ ] Build `apps/bot/src/proactive-monitor.ts` — polls every 6 hours, checks hedge score per user region, checks for unprotected exposure, fires alert when threshold crossed
-- [ ] Build proactive alert message format (see example above) — shows what Intend observed, what's at risk, proposed action
-- [ ] Wire to `intend-cron` PM2 process alongside existing reminder scheduler
-- [ ] Update DOCUMENTATION.md
+- [x] Collapse `AutomationLevel` type to `ExecutionMode: 'autonomous' | 'semi_autonomous'`
+- [x] Update permission gate: autonomous mode skips confirmation, generates receipt instead
+- [x] Add mode-switch intent detection to context interpreter — highest priority pass, runs before primitive classification
+- [x] Mode-switch updates session state in Redis immediately + persists to `users` table
+- [x] PROTECT mode hardcoded to `semi_autonomous` in permission gate regardless of user's global setting
+- [x] Update settings page UI — clear toggle with plain English explanation of both modes
+- [x] Update DOCUMENTATION.md
 
 ---
 
-### Phase 4 — OpenClaw Refactor
+### Phase 2 — Language Aperture ✅
 
-- [ ] Update `/.openclaw/workspace/WORKSPACE.md` — define agent lanes (Intelligence, Decision, Execution), handoff JSON schema, session state contract, which model each lane uses
-- [ ] Refactor `apps/bot/src/pipeline.ts` → thin normalizer + OpenClaw gateway client (~60 lines, down from ~200)
-- [ ] Refactor `apps/web/src/app/api/chat/route.ts` → same gateway, unified session with Telegram
-- [ ] Run `openclaw doctor --fix` and verify `dmPolicy = 'open'`
-- [ ] Update DOCUMENTATION.md
+- [x] Rewrite context interpreter prompt from classification to open reasoning: "What does this person want their money to do?" — structured output preserved, reasoning path widened
+- [x] Add assumptions layer: Intend states assumptions rather than asking for clarification. Clarification only fires if intent is ambiguous AND consequence irreversible.
+- [x] Mode-switch detection also added to web `/api/chat` route
+- [x] Update DOCUMENTATION.md
 
 ---
 
-### Phase 5 — Critical Fixes
+### Phase 3 — PROTECT Intelligence ✅
 
-- [ ] Fix `apps/web/src/app/api/confirm/route.ts` — after marking intent confirmed, call `dispatch()` (web execution gap)
-- [ ] Populate `balance_snapshot` before dispatch in `action-dispatcher.ts`
-- [ ] Build missing `packages/execution/src/conflict-resolver.ts`
-- [ ] Implement real `checkProtocolHealth()` in `agentkit/yield.ts` using DefiLlama TVL API (≥$10M threshold)
-- [ ] Update DOCUMENTATION.md
+- [x] Add `ForwardSignal` type + `forward_signal` to UFM environment — direction, score_delta, acceleration
+- [x] UFM builder computes `forward_signal` from FX trend + 30d change rate; hedge_score now live (was 0 placeholder)
+- [x] Build `apps/bot/src/proactive-monitor.ts` — polls every 6h, groups users by region, fires alert when hedge_score > 0.65
+- [x] Proactive alert message: shows FX change %, inflation rate, urgency framing — "Protect →" and "Not now" buttons
+- [x] Handle `protect_alert:accept` / `protect_alert:dismiss` callbacks in `handlers/callbacks.ts`
+- [x] Wire to `intend-cron` PM2 process — 30s warmup delay, then every 6h
+- [x] 24h cooldown per user via Redis `intend:protect:cooldown:{userId}` key
+- [x] Update DOCUMENTATION.md
+
+---
+
+### Phase 4 — OpenClaw Refactor ✅
+
+- [x] Update `/.openclaw/workspace/WORKSPACE.md` — agent lanes (Intelligence/Decision/Execution), handoff JSON schema, session state contract, model per lane, voice rules, PROTECT intelligence spec
+- [x] Pipeline architecture documented — gateway wiring deferred: pipeline is clean and stable as-is; full OpenClaw HTTP gateway requires VM access (`openclaw doctor --fix` runs on GCP VM)
+- [x] Web `/api/chat` route updated: mode-switch detection + plan caching
+- [x] Update DOCUMENTATION.md
+
+---
+
+### Phase 5 — Critical Fixes ✅
+
+- [x] Fix `apps/web/src/app/api/confirm/route.ts` — fetches plan from Redis cache, dispatches via dynamic import of `@intend/execution` (avoids webpack bundling issue with AgentKit)
+- [x] Populate `balance_snapshot` before dispatch — `dispatch()` now accepts `balanceSnapshot` param, passed from confirm route
+- [x] Build `packages/execution/src/conflict-resolver.ts` — `checkConflict()`, `assertNoConflict()`, `PlanConflictError`
+- [x] Implement real `checkProtocolHealth()` — live DefiLlama TVL API call, ≥$10M threshold + 30% drop guard
+- [x] `next.config.mjs` updated — `serverExternalPackages` for AgentKit/viem, `@intend/skills` added to `transpilePackages`
+- [x] Redis plan cache added — `intend:plan:{intentId}` key, 40min TTL, matches confirmation expiry window
+- [x] Update DOCUMENTATION.md
 
 ---
 

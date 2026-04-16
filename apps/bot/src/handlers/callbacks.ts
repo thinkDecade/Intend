@@ -150,6 +150,28 @@ export async function handleCallback(
     return;
   }
 
+  // ── protect_alert:accept ────────────────────────────────────────────────
+  // User tapped "Protect my savings →" on a proactive PROTECT alert.
+  // Treat as if user sent "protect my savings" — hand to pipeline.
+  if (data === 'protect_alert:accept') {
+    await bot.editMessageText(
+      'Got it — let me build your protection plan.',
+      { chat_id: chatId, message_id: query.message!.message_id },
+    );
+    const fakeMsg = { ...query.message!, text: 'protect my savings', from: query.message!.from! };
+    await runPipeline(bot, fakeMsg as TelegramBot.Message, userId);
+    return;
+  }
+
+  // ── protect_alert:dismiss ───────────────────────────────────────────────
+  if (data === 'protect_alert:dismiss') {
+    await bot.editMessageText(
+      'No problem — I\'ll keep watching. Tell me if anything changes.',
+      { chat_id: chatId, message_id: query.message!.message_id },
+    );
+    return;
+  }
+
   // ── cancel_pending ───────────────────────────────────────────────────────
   if (data === 'cancel_pending') {
     const intentId = session.pending_plan?.plan_id ?? null;

@@ -72,10 +72,10 @@ CLAUDE_channels.md
 CLAUDE_execution.md
 CLAUDE_intelligence.md
 CLAUDE_security_qa.md
-WORKSPACE.md
 tasks_backlog.md
 intend_schema_001.sql
 intend_frontend_try_1.html
 intend_logos_files/
+# Note: .openclaw/workspace/WORKSPACE.md is tracked — the WORKSPACE.md root exclusion was removed
 
 .vercel

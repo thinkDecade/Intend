@@ -1,30 +1,109 @@
 import type { CdpEvmWalletProvider } from '@coinbase/agentkit';
 import { buildTransaction, resolveTokenAddress } from '@intend/skills';
 
-// ── Protocol health thresholds (from CLAUDE.md) ───────────────────────────
+// ── Protocol health thresholds ─────────────────────────────────────────────
 
-const MIN_TVL_USD  = 50_000_000;   // $50M
-const MAX_TVL_DROP = 0.70;         // reject if TVL dropped >30% in 24h
+/** Minimum TVL for a protocol to be considered safe (BUILD_PLAN.md Phase 5). */
+const MIN_TVL_USD  = 10_000_000;   // $10M (as specified in Phase 5 requirements)
+/** Reject if TVL dropped more than 30% in 24h (potential exploit / bank run). */
+const MAX_TVL_DROP = 0.70;         // TVL must be ≥ 70% of what it was 24h ago
+
+/** DefiLlama slug names for each protocol. */
+const DEFILLAMA_SLUGS: Record<string, string> = {
+  aave_v3:  'aave-v3',
+  morpho:   'morpho',
+  moonwell: 'moonwell',
+};
+
+interface DefiLlamaTvlResponse {
+  tvl: Array<{ date: number; totalLiquidityUSD: number }>;
+}
+
+/**
+ * Fetch current TVL for a protocol from DefiLlama.
+ * Returns the most recent TVL value in USD.
+ */
+async function fetchProtocolTvl(slug: string): Promise<{ current: number; prev24h: number | null }> {
+  const url = `https://api.llama.fi/protocol/${slug}`;
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(8000),
+    headers: { 'Accept': 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new ProtocolRejectedError(
+      `DefiLlama health check failed for ${slug}: HTTP ${response.status}`
+    );
+  }
+
+  const data = await response.json() as DefiLlamaTvlResponse;
+  const tvlHistory = data.tvl ?? [];
+
+  if (tvlHistory.length === 0) {
+    throw new ProtocolRejectedError(`No TVL data available for ${slug}`);
+  }
+
+  const current = tvlHistory.at(-1)?.totalLiquidityUSD ?? 0;
+
+  // Find TVL from approximately 24 hours ago (86400 seconds)
+  const nowSecs = Date.now() / 1000;
+  const target24hAgo = nowSecs - 86400;
+  const prev24hEntry = tvlHistory
+    .filter((e) => e.date <= target24hAgo)
+    .at(-1);
+
+  return { current, prev24h: prev24hEntry?.totalLiquidityUSD ?? null };
+}
 
 // ── Protocol health check ─────────────────────────────────────────────────
 
 /**
  * Mandatory check before every yield deposit.
- * Queries DefiLlama for current TVL and recent exploit reports.
+ * Queries DefiLlama for:
+ *   1. Current TVL ≥ $10M (BUILD_PLAN.md Phase 5 threshold)
+ *   2. TVL has not dropped > 30% in 24 hours (exploit / bank-run signal)
+ *
+ * Non-allowlisted protocols are rejected immediately (no DefiLlama call).
  */
 export async function checkProtocolHealth(
-  protocol:  string,
-  chain:     string = 'base'
+  protocol: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  chain:    string = 'base',
 ): Promise<void> {
-  // Production: fetch live TVL from DefiLlama
-  // Stub: pass through — real implementation in P1-04 integration tests
-  // The APY signal engine already caches TVL; reuse that data here
-
-  // For now, known-safe protocols pass automatically
-  const APPROVED_PROTOCOLS = ['aave_v3', 'morpho', 'moonwell'];
-  if (!APPROVED_PROTOCOLS.includes(protocol)) {
+  const slug = DEFILLAMA_SLUGS[protocol];
+  if (!slug) {
     throw new ProtocolRejectedError(
-      `${protocol} is not in the approved protocol list for ${chain}`
+      `${protocol} is not in the approved protocol list`
+    );
+  }
+
+  let tvl: { current: number; prev24h: number | null };
+  try {
+    tvl = await fetchProtocolTvl(slug);
+  } catch (err) {
+    if (err instanceof ProtocolRejectedError) throw err;
+    // Network failure — fail open in testnet, fail closed in production
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new ProtocolRejectedError(
+        `Could not verify ${protocol} health — DefiLlama unreachable`
+      );
+    }
+    console.warn(`[yield] Health check skipped for ${protocol} (non-production):`, err);
+    return;
+  }
+
+  // Check 1: minimum TVL
+  if (tvl.current < MIN_TVL_USD) {
+    throw new ProtocolRejectedError(
+      `${protocol} TVL ($${(tvl.current / 1_000_000).toFixed(1)}M) is below the $${MIN_TVL_USD / 1_000_000}M safety threshold`
+    );
+  }
+
+  // Check 2: 24h TVL drop
+  if (tvl.prev24h !== null && tvl.current < tvl.prev24h * MAX_TVL_DROP) {
+    const dropPct = ((1 - tvl.current / tvl.prev24h) * 100).toFixed(1);
+    throw new ProtocolPausedError(
+      `${protocol} TVL dropped ${dropPct}% in 24h — pausing to protect your funds`
     );
   }
 }

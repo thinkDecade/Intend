@@ -6,6 +6,17 @@ const nextConfig = {
     '@intend/decision',
     '@intend/data',
     '@intend/signals',
+    '@intend/skills',
+  ],
+
+  // Exclude heavy execution-layer packages from Next.js bundling.
+  // These packages use native Node.js APIs and must be required() at runtime
+  // rather than bundled by webpack. Applies to all server-side routes.
+  serverExternalPackages: [
+    '@intend/execution',
+    '@coinbase/agentkit',
+    '@coinbase/cdp-sdk',
+    'viem',
   ],
 
   // Allow webpack to resolve `.js` imports as `.ts` sources (NodeNext ESM convention)

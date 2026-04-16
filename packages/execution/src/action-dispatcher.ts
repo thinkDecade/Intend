@@ -21,11 +21,16 @@ export interface DispatchResult {
  *
  * This is the only function that signs and broadcasts transactions.
  * Strategy Generators never touch keys directly.
+ *
+ * @param balanceSnapshot - Pre-fetched balance map (asset → amount).
+ *   MUST be fetched from chain immediately before calling dispatch.
+ *   Stored in atomicity context for rollback verification.
  */
 export async function dispatch(
-  plan:     ExecutionPlan,
-  provider: CdpEvmWalletProvider,
-  channel:  'telegram' | 'whatsapp' | 'web'
+  plan:             ExecutionPlan,
+  provider:         CdpEvmWalletProvider,
+  channel:          'telegram' | 'whatsapp' | 'web',
+  balanceSnapshot:  Record<string, number> = {},
 ): Promise<DispatchResult> {
   const walletAddress = provider.getAddress() as `0x${string}`;
   const tx_hashes: string[] = [];
@@ -40,7 +45,7 @@ export async function dispatch(
       user_id:          plan.user_id,
       channel,
       steps:            atomicSteps,
-      balance_snapshot: {}, // populated by caller before dispatch in production
+      balance_snapshot: balanceSnapshot,
     });
 
     return { success: true, tx_hashes };
