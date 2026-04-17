@@ -20,6 +20,7 @@ export interface UserRow {
   preferred_channel: 'telegram' | 'whatsapp' | 'web' | null;
   max_auto_tx_usd: number;
   require_confirm_new_recipient: boolean;
+  onboarding_completed: boolean;
   created_at: string;
   last_active_at: string | null;
   is_active: boolean;
@@ -147,6 +148,15 @@ export async function getAllActiveUsersWithTelegram(): Promise<UserRow[]> {
 
   if (error) throw new Error(`[users] getAllActiveUsersWithTelegram: ${error.message}`);
   return (data ?? []) as UserRow[];
+}
+
+export async function markOnboardingComplete(userId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('users')
+    .update({ onboarding_completed: true })
+    .eq('user_id', userId);
+
+  if (error) throw new Error(`[users] markOnboardingComplete: ${error.message}`);
 }
 
 export async function updateUserSettings(

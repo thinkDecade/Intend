@@ -10,6 +10,8 @@ import { getUserByEmail, createUser } from '@intend/data';
  * with ?code=... (PKCE flow) or ?token_hash=...&type=email (OTP flow).
  * We exchange the code/token for a session, ensure a users table row
  * exists, and redirect to /app.
+ *
+ * New users (onboarding_completed = false) are sent to /onboard first.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
@@ -25,26 +27,23 @@ export async function GET(request: NextRequest) {
   let authError: string | null = null;
 
   if (code) {
-    // PKCE flow — exchange authorization code for session
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      await ensureUserRecord(supabase);
-      return NextResponse.redirect(`${origin}${next}`);
+      const destination = await ensureUserRecord(supabase, next);
+      return NextResponse.redirect(`${origin}${destination}`);
     }
     authError = error.message;
   }
 
   if (token_hash && type) {
-    // OTP / magic link token flow
     const { error } = await supabase.auth.verifyOtp({ token_hash, type });
     if (!error) {
-      await ensureUserRecord(supabase);
-      return NextResponse.redirect(`${origin}${next}`);
+      const destination = await ensureUserRecord(supabase, next);
+      return NextResponse.redirect(`${origin}${destination}`);
     }
     authError = error.message;
   }
 
-  // Exchange failed — redirect to login with error info
   const loginUrl = new URL('/login', origin);
   loginUrl.searchParams.set('error', 'auth_failed');
   if (authError) loginUrl.searchParams.set('message', authError);
@@ -53,22 +52,34 @@ export async function GET(request: NextRequest) {
 
 /**
  * Ensure the internal `users` table has a row for this auth user.
- * Called after every successful auth exchange — idempotent.
+ * Returns the destination path — new users go to /onboard, returning users
+ * go to the requested `next` path.
  */
-async function ensureUserRecord(supabase: ReturnType<typeof createClient>) {
+async function ensureUserRecord(
+  supabase: ReturnType<typeof createClient>,
+  next: string,
+): Promise<string> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.email) return;
+    if (!user?.email) return next;
 
     const existing = await getUserByEmail(user.email).catch(() => null);
-    if (existing) return; // already exists
 
+    if (existing) {
+      // Returning user — resume requested destination
+      // If they never finished onboarding, send them back there
+      if (!existing.onboarding_completed) return '/onboard';
+      return next;
+    }
+
+    // Brand-new user — create record and send to onboarding
     await createUser({
       email:      user.email,
       webapp_uid: user.id,
     });
+    return '/onboard';
   } catch (err) {
-    // Non-fatal — layout will retry on next page load
     console.error('[auth/callback] ensureUserRecord failed:', err);
+    return next;
   }
 }

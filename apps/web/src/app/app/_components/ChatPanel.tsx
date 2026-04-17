@@ -42,6 +42,18 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Pick up intent pre-filled during onboarding
+  useEffect(() => {
+    const pending = sessionStorage.getItem('intend:first_intent');
+    if (pending) {
+      sessionStorage.removeItem('intend:first_intent');
+      // Small delay to let the panel mount fully before sending
+      const t = setTimeout(() => void sendMessage(pending), 600);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-resize textarea
   function autoResize(el: HTMLTextAreaElement) {
     el.style.height = 'auto';
