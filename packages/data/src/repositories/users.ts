@@ -19,6 +19,7 @@ export interface UserRow {
   kyc_tier: 'tier_0' | 'tier_1' | 'tier_2' | 'tier_3';
   preferred_channel: 'telegram' | 'whatsapp' | 'web' | null;
   max_auto_tx_usd: number;
+  require_confirm_new_recipient: boolean;
   created_at: string;
   last_active_at: string | null;
   is_active: boolean;
@@ -155,6 +156,11 @@ export async function updateUserSettings(
     local_currency?: string;
     region?: string;
     display_name?: string | null;
+    timezone?: string;
+    preferred_language?: string;
+    preferred_channel?: 'telegram' | 'whatsapp' | 'web' | null;
+    max_auto_tx_usd?: number;
+    require_confirm_new_recipient?: boolean;
   },
 ): Promise<void> {
   const { error } = await getSupabase()
