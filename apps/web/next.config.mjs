@@ -9,16 +9,6 @@ const nextConfig = {
     '@intend/skills',
   ],
 
-  // Exclude heavy execution-layer packages from Next.js bundling.
-  // These packages use native Node.js APIs and must be required() at runtime
-  // rather than bundled by webpack. Applies to all server-side routes.
-  serverExternalPackages: [
-    '@intend/execution',
-    '@coinbase/agentkit',
-    '@coinbase/cdp-sdk',
-    'viem',
-  ],
-
   // Allow webpack to resolve `.js` imports as `.ts` sources (NodeNext ESM convention)
   experimental: {
     extensionAlias: {
@@ -26,6 +16,17 @@ const nextConfig = {
       '.mjs': ['.mts', '.mjs'],
       '.cjs': ['.cts', '.cjs'],
     },
+    // Exclude heavy execution-layer packages from Next.js bundling (Next.js 14 syntax).
+    // These packages use native Node.js APIs and must be required() at runtime
+    // rather than bundled by webpack. Applies to all server-side routes.
+    serverComponentsExternalPackages: [
+      '@intend/execution',
+      '@coinbase/agentkit',
+      '@coinbase/cdp-sdk',
+      'viem',
+      '@x402/core',
+      '@x402/paywall',
+    ],
   },
 };
 

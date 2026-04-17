@@ -79,3 +79,6 @@ intend_logos_files/
 # Note: .openclaw/workspace/WORKSPACE.md is tracked — the WORKSPACE.md root exclusion was removed
 
 .vercel
+
+# Local Netlify folder
+.netlify
