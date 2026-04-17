@@ -11,7 +11,7 @@
   # package-manager detection (which spawns yarn in weird ways on Windows).
   # Order matters: core/skills first (no deps), then data/signals (depend
   # on core), then decision/intelligence, then web.
-  command     = "npx tsc -p packages/core/tsconfig.json && npx tsc -p packages/skills/tsconfig.json && npx tsc -p packages/data/tsconfig.json && npx tsc -p packages/signals/tsconfig.json && npx tsc -p packages/decision/tsconfig.json && npx tsc -p packages/intelligence/tsconfig.json && cd apps/web && node ../../node_modules/next/dist/bin/next build"
+  command     = "npx tsc -p packages/core/tsconfig.json && npx tsc -p packages/skills/tsconfig.json && npx tsc -p packages/data/tsconfig.json && npx tsc -p packages/signals/tsconfig.json && npx tsc -p packages/decision/tsconfig.json && npx tsc -p packages/intelligence/tsconfig.json && npx tsc -p packages/execution/tsconfig.json && cd apps/web && node ../../node_modules/next/dist/bin/next build"
   publish     = "apps/web/.next"
 
 [build.environment]
