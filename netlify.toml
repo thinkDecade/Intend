@@ -3,17 +3,21 @@
 # Bot + cron: GCP VM (not Netlify)
 
 [build]
-  # Build from monorepo root — Turborepo resolves all workspace dependencies
-  base          = "."
-  command       = "npx turbo build"
-  publish       = "apps/web/.next"
+  # Build from monorepo root so turbo can resolve all workspace packages
+  base        = "."
+  # Build each workspace package explicitly, then next — avoids turbo/yarn
+  # PATH issues on CI. Order matters: core/skills first (no deps), then
+  # data/signals (depend on core), then decision/intelligence, then web.
+  command     = "npx tsc -p packages/core/tsconfig.json && npx tsc -p packages/skills/tsconfig.json && npx tsc -p packages/data/tsconfig.json && npx tsc -p packages/signals/tsconfig.json && npx tsc -p packages/decision/tsconfig.json && npx tsc -p packages/intelligence/tsconfig.json && cd apps/web && npx next build"
+  publish     = "apps/web/.next"
+  # Tell Netlify this is a monorepo — @netlify/plugin-nextjs reads PACKAGE_PATH
+  # from this setting to locate the Next.js app
+  packagePath = "apps/web"
 
 [build.environment]
-  NODE_VERSION              = "22"
-  YARN_VERSION              = "1.22.22"
-  NEXT_TELEMETRY_DISABLED   = "1"
-  # Tell @netlify/plugin-nextjs where the Next.js project lives in this monorepo
-  NETLIFY_NEXT_APP_DIR      = "apps/web"
+  NODE_VERSION            = "22"
+  YARN_VERSION            = "1.22.22"
+  NEXT_TELEMETRY_DISABLED = "1"
 
 # Netlify Next.js plugin — handles SSR, image optimization, and API routes
 # Installed as a devDep in apps/web/package.json (pins v5.15.9, avoids dynamic install)
