@@ -1,3 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: [
@@ -11,6 +16,12 @@ const nextConfig = {
 
   // Allow webpack to resolve `.js` imports as `.ts` sources (NodeNext ESM convention)
   experimental: {
+    // Monorepo: trace files from the repo root so hoisted node_modules and
+    // workspace packages are included in Netlify Functions bundle.
+    // Without this, .netlify/functions-internal misses `next` and other
+    // hoisted packages, causing "Cannot find module 'next/...'" at runtime.
+    outputFileTracingRoot: path.join(__dirname, '..', '..'),
+
     extensionAlias: {
       '.js':  ['.ts', '.tsx', '.js', '.jsx'],
       '.mjs': ['.mts', '.mjs'],

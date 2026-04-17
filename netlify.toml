@@ -8,7 +8,7 @@
   # Build each workspace package explicitly, then next — avoids turbo/yarn
   # PATH issues on CI. Order matters: core/skills first (no deps), then
   # data/signals (depend on core), then decision/intelligence, then web.
-  command     = "npx tsc -p packages/core/tsconfig.json && npx tsc -p packages/skills/tsconfig.json && npx tsc -p packages/data/tsconfig.json && npx tsc -p packages/signals/tsconfig.json && npx tsc -p packages/decision/tsconfig.json && npx tsc -p packages/intelligence/tsconfig.json && cd apps/web && npx next build"
+  command     = "npx tsc -p packages/core/tsconfig.json && npx tsc -p packages/skills/tsconfig.json && npx tsc -p packages/data/tsconfig.json && npx tsc -p packages/signals/tsconfig.json && npx tsc -p packages/decision/tsconfig.json && npx tsc -p packages/intelligence/tsconfig.json && cd apps/web && node ../../node_modules/next/dist/bin/next build"
   publish     = "apps/web/.next"
   # Tell Netlify this is a monorepo — @netlify/plugin-nextjs reads PACKAGE_PATH
   # from this setting to locate the Next.js app
