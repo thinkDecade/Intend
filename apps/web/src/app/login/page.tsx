@@ -15,6 +15,7 @@ export default function LoginPage() {
 function LoginForm() {
   const [step, setStep]     = useState<'email' | 'otp'>('email');
   const [email, setEmail]   = useState('');
+  const [token, setToken]   = useState('');
   const [error, setError]   = useState('');
   const [isPending, startTransition] = useTransition();
   const searchParams = useSearchParams();
@@ -97,19 +98,32 @@ function LoginForm() {
               </button>
             </form>
           ) : (
-            <form onSubmit={handleOtpSubmit}>
+            <form onSubmit={handleOtpSubmit} autoComplete="off">
               <label className="login-label" htmlFor="token">6-digit code</label>
               <input
                 id="token"
                 name="token"
                 type="text"
                 inputMode="numeric"
+                pattern="[0-9]{6}"
                 autoComplete="one-time-code"
+                autoCorrect="off"
+                spellCheck={false}
                 maxLength={6}
                 required
                 autoFocus
                 placeholder="000000"
                 className="login-input otp"
+                value={token}
+                onChange={(e) => setToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                  setToken(pasted);
+                }}
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
               />
               <button
                 type="submit"
@@ -121,7 +135,7 @@ function LoginForm() {
               <button
                 type="button"
                 className="login-btn-ghost"
-                onClick={() => { setStep('email'); setError(''); }}
+                onClick={() => { setStep('email'); setError(''); setToken(''); }}
               >
                 Use a different email
               </button>
