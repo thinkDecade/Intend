@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@intend/core": "*",
+    "@intend/data": "*",
+    "@intend/signals": "*",
     "ai": "^4.0.0",
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/openai": "^1.3.24",
