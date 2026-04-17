@@ -23,7 +23,6 @@ export default async function SettingsPage() {
         region:                        dbUser.region,
         local_currency:                dbUser.local_currency,
         timezone:                      dbUser.timezone,
-        kyc_tier:                      dbUser.kyc_tier,
         execution_mode:                dbUser.execution_mode,
         max_auto_tx_usd:               Number(dbUser.max_auto_tx_usd ?? 500),
         require_confirm_new_recipient: dbUser.require_confirm_new_recipient ?? true,

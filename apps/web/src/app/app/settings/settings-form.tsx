@@ -10,7 +10,6 @@ import {
 } from '../actions';
 
 type ExecutionMode = 'autonomous' | 'semi_autonomous';
-type KycTier      = 'tier_0' | 'tier_1' | 'tier_2' | 'tier_3';
 type Channel      = 'telegram' | 'whatsapp' | 'web';
 
 export interface SettingsInitial {
@@ -19,7 +18,6 @@ export interface SettingsInitial {
   region: string;
   local_currency: string;
   timezone: string;
-  kyc_tier: KycTier;
   execution_mode: ExecutionMode;
   max_auto_tx_usd: number;
   require_confirm_new_recipient: boolean;
@@ -27,13 +25,6 @@ export interface SettingsInitial {
   telegram_linked: boolean;
   whatsapp_linked: boolean;
 }
-
-const KYC_LABEL: Record<KycTier, string> = {
-  tier_0: 'Tier 0 — unverified',
-  tier_1: 'Tier 1',
-  tier_2: 'Tier 2',
-  tier_3: 'Tier 3',
-};
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'GHS', 'NGN', 'KES', 'ZAR', 'CAD'];
 const REGIONS    = ['US', 'GB', 'GH', 'NG', 'KE', 'ZA', 'CA', 'EU'];
@@ -202,14 +193,6 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
               placeholder="e.g. Africa/Accra"
               className="login-input"
             />
-          </div>
-
-          <div className="settings-row">
-            <div>
-              <div className="settings-row-title">KYC Tier</div>
-              <div className="settings-row-sub">Identity verification level</div>
-            </div>
-            <div className="settings-badge">{KYC_LABEL[initial.kyc_tier]}</div>
           </div>
 
           <div className="settings-row" style={{ justifyContent: 'space-between' }}>

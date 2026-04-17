@@ -10,8 +10,11 @@ export interface PermissionCheck {
 }
 
 // ── KYC tier limits ───────────────────────────────────────────────────────
+// NOTE: KYC gating is disabled in v0.5 for frictionless onboarding. The
+// tier limits table is retained for re-activation in a future version.
 
-const KYC_TX_LIMITS: Record<string, number> = {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _KYC_TX_LIMITS: Record<string, number> = {
   tier_0: 100,
   tier_1: 1_000,
   tier_2: 10_000,
@@ -31,18 +34,9 @@ export function checkPermission(
   ufm:        UserFinancialModel,
   primitive:  string
 ): PermissionCheck {
-  const { kyc_tier, execution_mode, max_auto_tx_usd } = ufm.identity;
+  const { execution_mode, max_auto_tx_usd } = ufm.identity;
 
-  // 1. KYC hard limit — blocks the transaction entirely
-  const kycLimit = KYC_TX_LIMITS[kyc_tier] ?? 100;
-  if (amountUsd > kycLimit) {
-    return {
-      allowed:               false,
-      requires_confirmation: false,
-      reason: `KYC ${kyc_tier} limits transactions to $${kycLimit.toLocaleString()}. ` +
-              `Upgrade your verification to proceed.`,
-    };
-  }
+  // 1. KYC gate — disabled in v0.5. Re-enable by checking _KYC_TX_LIMITS.
 
   // 2. Primitives that always require confirmation regardless of mode
   if (ALWAYS_CONFIRM_PRIMITIVES.has(primitive)) {
