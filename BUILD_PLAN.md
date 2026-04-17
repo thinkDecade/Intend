@@ -245,8 +245,8 @@ User speaks freely (any language, any phrasing)
 - [x] Channels: Telegram + Web (live), WhatsApp (visually dimmed, "· soon")
 - [x] Primitive grid: 2-column layout for 4 items
 - [x] All new CSS: execution mode cards, dismiss button, proactive alert styling
-- [ ] Full end-to-end smoke test: Telegram + Web, both execution modes, all 4 primitives (requires live deploy)
-- [ ] Update DOCUMENTATION.md
+- [x] Full end-to-end smoke test: 2 critical bugs found and fixed (intent_confidence NOT NULL; viem Lambda bundle miss → /api/chat 500)
+- [x] Update DOCUMENTATION.md
 
 ---
 
