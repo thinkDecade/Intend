@@ -5,7 +5,7 @@
 [build]
   # Build from monorepo root — Turborepo resolves all workspace dependencies
   base          = "."
-  command       = "npx turbo build --filter=@intend/web"
+  command       = "npx turbo build"
   publish       = "apps/web/.next"
 
 [build.environment]
