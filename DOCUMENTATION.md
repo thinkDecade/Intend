@@ -1,8 +1,8 @@
 # INTEND v0.5 — Technical Documentation
 
-> Last updated: 2026-04-16 (Phases 2–5 complete)
-> Status: Active build — Phase 6 (Netlify deploy) + Phase 7 (landing page) remaining
-> Web: https://intendfinance.netlify.app
+> Last updated: 2026-04-17 (Phases 0–7 complete)
+> Status: v0.5 LIVE — https://intendfinance.netlify.app
+> Remaining: end-to-end smoke test (requires live deploy + GCP VM `git pull`)
 > Build Plan: `BUILD_PLAN.md` (source of truth for current build direction)
 
 ---
@@ -261,7 +261,7 @@ intend/
 | Database | Supabase (PostgreSQL 16) | Hosted |
 | Cache | Upstash Redis (REST) | Serverless |
 | Web Framework | Next.js 14 App Router | 14.x |
-| Hosting | Vercel (web) + GCP Compute Engine (bot) | - |
+| Hosting | Netlify (web) + GCP Compute Engine (bot) | - |
 | Monorepo | Turborepo | Latest |
 | Package Manager | Yarn | 1.22.22 |
 | DEX | Aerodrome (primary) + Uniswap V3 (secondary) | Base |
@@ -565,24 +565,25 @@ Adding a new protocol = adding a JSON file. Zero TypeScript changes.
 ## 12. Web Application
 
 **Framework:** Next.js 14 App Router
-**Deployed to:** Vercel (https://intend-web.vercel.app)
+**Deployed to:** Netlify (https://intendfinance.netlify.app)
 **Animation Library:** framer-motion v12.38+ (scroll-triggered animations, parallax)
 
-### Landing Page (`/`)
+### Landing Page (`/`) — Phase 7 update
 
-Premium dark-themed landing page inspired by awsmd.com design patterns. Client component using framer-motion for scroll-triggered animations, parallax hero, and staggered reveals.
+Premium dark-themed landing page. Client component using framer-motion for scroll-triggered animations, parallax hero, and staggered reveals.
 
-**Sections:**
-1. **Sticky Nav** — Glassmorphism (`backdrop-filter: blur(16px)`), logo + nav links + CTA button
-2. **Hero** — Full-viewport, parallax scroll (via `useScroll`/`useTransform`), animated badge, large serif headline with italic accent, dual CTAs (primary + ghost), decorative gradient orb
-3. **Vision** — Centered text block with the brand story, staggered fade-in
-4. **How It Works** — Three numbered step cards (`01`, `02`, `03`) with hover lift, large serif numerals
-5. **Stats Bar** — Four-column metrics grid (8 primitives, 3 channels, <1s interpretation, 0 protocol knowledge)
-6. **Capabilities** — 4-column card grid of all 8 financial primitives with arrow-on-hover effect
-7. **Showcase** — Simulated chat conversation demonstrating the PROTECT flow with plan preview card
-8. **Channels** — Three-card grid (Telegram, Web, WhatsApp)
-9. **Bottom CTA** — Brand tagline with large serif type and primary CTA
-10. **Footer** — Brand, links, copyright, version
+**Sections (v0.5):**
+1. **Sticky Nav** — Logo + nav links + CTA button
+2. **Hero** — Full-viewport parallax, animated badge, large serif headline, dual CTAs
+3. **Vision** — Brand story ("For centuries, people have adapted themselves to financial systems")
+4. **How It Works** — Three numbered step cards (`01`, `02`, `03`)
+5. **Stats Bar** — 4 primitives · 6h monitoring · <1s interpretation · 0 protocol knowledge
+6. **Execution Modes** — Semi-Autonomous (default) vs Autonomous cards with trigger phrases
+7. **Capabilities** — 2×2 grid of 4 active primitives (PROTECT, CONVERT, SEND, SPEND)
+8. **Showcase** — Proactive PROTECT alert: FX change %, inflation rate, "Protect my savings →" / "Not now" buttons
+9. **Channels** — Telegram (live) + Web (live) + WhatsApp (dimmed, "· soon")
+10. **Bottom CTA** — Brand tagline + primary CTA
+11. **Footer** — Brand, links, copyright, v0.5
 
 **Design Tokens:**
 - Font: `Instrument Serif` (italic, for headings/numerals) + system sans + Geist Mono
@@ -814,14 +815,17 @@ Custom branded email via Resend SMTP: dark background (#1A1612), amber OTP code 
 
 ## 18. Deployment & Infrastructure
 
-### Netlify (Web App)
+### Netlify (Web App) — LIVE ✅
 
 - **URL:** https://intendfinance.netlify.app
-- **Framework:** Next.js 14 (via `@netlify/plugin-nextjs`)
-- **Build command:** `npx turbo build --filter=@intend/web`
+- **Project:** intendfinance (ID: 4f7590d4-f5ce-4395-915d-fcaeae2cb81f)
+- **Framework:** Next.js 14 (via `@netlify/plugin-nextjs` v5.15.9)
+- **Build command:** `npx turbo build --filter=@intend/web` (run from monorepo root)
 - **Publish dir:** `apps/web/.next`
 - **Config:** `netlify.toml` at repo root
-- **Note:** Replaces Vercel. All env vars migrated to Netlify dashboard.
+- **Deploy:** CLI `netlify deploy --prod --build` from `apps/web/` OR push to `v0.5` branch
+- **17 env vars set** via `netlify env:set` (in "all" context — covers production + preview)
+- **next.config.mjs:** Uses `experimental.serverComponentsExternalPackages` (Next.js 14 syntax). `@intend/execution`, `@coinbase/agentkit`, `@coinbase/cdp-sdk`, `viem`, `@x402/core`, `@x402/paywall` excluded from webpack bundling.
 
 ### GCP Compute Engine (Bot + Services)
 
@@ -903,9 +907,9 @@ All of the above plus:
 
 ## 21. Known Gaps & Post-v0.5
 
-### Working Now (Phases 0–5 complete)
+### Working Now (Phases 0–7 complete)
 
-- 4 active primitives: PROTECT, CONVERT, MOVE (Send), SPEND
+- 4 active primitives: PROTECT, CONVERT, SEND, SPEND
 - 4 gated primitives: GROW, SAVE, EARN, INVEST (friendly "coming in next version" message)
 - Two execution modes: Autonomous + Semi-Autonomous, switchable via settings and conversation
 - PROTECT hardcoded semi-autonomous (invariant)
@@ -922,20 +926,19 @@ All of the above plus:
 - OTP auth + branded emails
 - Streaming chat with plan preview
 - Settings persistence (execution mode toggle)
+- **Phase 6:** Deployed to Netlify — 17 env vars set, build clean, live at https://intendfinance.netlify.app
+- **Phase 7:** Landing page updated — 4 primitives, execution modes section, PROTECT showcase, WhatsApp "· soon"
 
-### Remaining (Phases 6–7)
+### Remaining (Post-v0.5)
 
-| Item | Phase | Notes |
-|------|-------|-------|
-| Netlify env vars | Phase 6 | Set in Netlify dashboard — requires Supabase/Redis/AI keys |
-| DNS verification | Phase 6 | `intendfinance.netlify.app` already live, custom domain pending |
-| Landing page update | Phase 7 | 4 primitives (not 8), dual execution mode, PROTECT intelligence |
-| WhatsApp "coming soon" | Phase 7 | Replace "connected" with honest state |
-| End-to-end smoke test | Phase 7 | Both channels, both modes, all 4 primitives |
-| OpenClaw gateway wiring | Post-Phase 4 | WORKSPACE.md updated; HTTP gateway requires VM SSH access |
-| On-chain balance display | v0.6 | `/api/portfolio` returns 0 for wallet balance |
-| History page filtering | v0.6 | No date range or primitive filter UI |
-| Cross-channel handoff | v0.6 | Redis → Supabase sync exists but untested end-to-end |
+| Item | Notes |
+|------|-------|
+| End-to-end smoke test | Both Telegram + Web channels, both modes, all 4 primitives — requires live deploy + GCP VM update |
+| GCP VM update | `git pull origin v0.5` + `pm2 restart all` to activate proactive monitor on server |
+| OpenClaw gateway wiring | WORKSPACE.md updated; HTTP gateway requires VM SSH access (`openclaw doctor --fix`) |
+| On-chain balance display | `/api/portfolio` returns 0 for wallet balance |
+| History page filtering | No date range or primitive filter UI |
+| Cross-channel handoff | Redis → Supabase sync exists but untested end-to-end |
 
 ### Post-v0.5 (Explicitly Deferred)
 
@@ -954,27 +957,31 @@ All of the above plus:
 Run after every major change:
 
 ```bash
-# 1. Build all packages
+# 1. Build all packages (from monorepo root)
 npx turbo build --force
 
 # 2. Verify all 10 packages succeed
 # Expected: "@intend/core, intelligence, decision, execution,
 #            signals, skills, data, web, bot, whatsapp — 10 successful"
 
-# 3. Deploy to Vercel
-npx vercel deploy --prod --yes
+# 3. Deploy to Netlify (from apps/web/)
+cd apps/web && npx netlify deploy --prod --build
 
 # 4. Push Supabase config (if auth/email changed)
 echo "Y" | npx supabase config push --project-ref otlnqhgixnnppktrzxmj
 
-# 5. Update this documentation
-# Add to the todo list after every major build
+# 5. Update GCP VM (if bot changes were made)
+# ssh thinkdecade@34.63.81.169
+# cd ~/intend && git pull origin v0.5 && pm2 restart all
 
-# 6. Test auth flow
-# Visit https://intend-web.vercel.app/login
+# 6. Update this documentation
+# Update DOCUMENTATION.md after every phase completes
+
+# 7. Test auth flow
+# Visit https://intendfinance.netlify.app/login
 # Enter email → receive OTP → enter code → land on /app
 
-# 7. Test chat
+# 8. Test chat
 # Send a message in the chat → verify streaming response
 ```
 
@@ -994,7 +1001,7 @@ echo "Y" | npx supabase config push --project-ref otlnqhgixnnppktrzxmj
 | Repository files | 9 |
 | Web routes | 9 pages + 4 API |
 | Telegram commands | 8 |
-| Vercel env vars | 9 |
+| Netlify env vars | 17 |
 | Supported chain | 1 (Base) + 1 testnet |
 
 ---

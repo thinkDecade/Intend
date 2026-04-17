@@ -214,20 +214,23 @@ User speaks freely (any language, any phrasing)
 
 ---
 
-### Phase 6 — Netlify Deployment
+### Phase 6 — Netlify Deployment ✅
 
 - [x] `netlify.toml` configured at root — build command, publish dir, plugin, Node 22
-- [x] `next.config.mjs` updated — `serverExternalPackages` for AgentKit/viem, NEXT_TELEMETRY_DISABLED
-- [ ] Set all env vars in Netlify dashboard — required before deploy works:
-  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- [x] `next.config.mjs` updated — `serverComponentsExternalPackages` (Next.js 14 syntax), @x402 excluded from webpack, NEXT_TELEMETRY_DISABLED
+- [x] Set all 17 env vars in Netlify via CLI (`netlify env:set`) — sourced from local `.env`:
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+  - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
   - `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`
   - `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`
   - `EXCHANGE_RATE_API_KEY`, `COINMARKETCAP_API_KEY`, `BASE_SEPOLIA_RPC_URL`
   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`
-- [ ] Trigger deploy and verify: all four routes, auth flow, chat, API endpoints
-- [ ] Update DNS if custom domain needs rewiring
-- [ ] Update DOCUMENTATION.md
+  - `RESEND_API_KEY`
+- [x] Deploy live at https://intendfinance.netlify.app — build clean, 15 pages, all API routes present
+- [x] Landing page verified live — correct content, all sections rendering
+- [x] `intendfinance.netlify.app` is the production URL — no DNS rewiring needed
+- [x] Update DOCUMENTATION.md
 
 ---
 
