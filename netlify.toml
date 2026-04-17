@@ -15,8 +15,13 @@
   NEXT_TELEMETRY_DISABLED = "1"
 
 # Netlify Next.js plugin — handles SSR, image optimization, and API routes
+# Installed as a devDep in apps/web/package.json (pins version, avoids dynamic install)
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+[plugins.inputs]
+  # Tell the plugin where the Next.js project lives in this monorepo
+  siteDirectory = "apps/web"
 
 [dev]
   command    = "yarn workspace @intend/web dev"
