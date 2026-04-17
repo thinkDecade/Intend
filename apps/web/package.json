@@ -13,6 +13,7 @@
     "@intend/core": "*",
     "@intend/data": "*",
     "@intend/decision": "*",
+    "@intend/execution": "*",
     "@intend/intelligence": "*",
     "@intend/signals": "*",
     "@intend/skills": "*",
