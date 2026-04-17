@@ -5,7 +5,8 @@ import { getUserById, getActiveGoals, getActivePositions, getPendingConfirmation
 import { buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch } from '@intend/intelligence';
 import { updateUserSettings, logEvent } from '@intend/data';
 import { generatePlan } from '@intend/decision';
-import { isAddress } from 'viem';
+// Inline EVM address check — avoids a viem import in the Lambda bundle
+const isEvmAddress = (v: string): boolean => /^0x[0-9a-fA-F]{40}$/.test(v);
 
 // ── Helper: SSE event ──────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
 
         // 6. Build strategy context
         const recipientRaw = intention.parameters.recipient_raw ?? '';
-        const resolvedAddress = isAddress(recipientRaw) ? recipientRaw : '';
+        const resolvedAddress = isEvmAddress(recipientRaw) ? recipientRaw : '';
         const amountRaw = intention.parameters.amount ?? 0;
         const amountUsd = amountRaw === 'all' ? ufm.present.total_usd_value : amountRaw;
 

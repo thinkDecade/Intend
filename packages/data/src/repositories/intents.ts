@@ -28,12 +28,13 @@ export async function createIntent(
   const { data, error } = await getSupabase()
     .from('intents')
     .insert({
-      user_id:          userId,
+      user_id:           userId,
       channel,
-      primitive:        intention.primitive,
-      raw_input:        intention.raw_input,
-      intention_object: intention,
-      status:           'pending',
+      primitive:         intention.primitive,
+      raw_input:         intention.raw_input,
+      intention_object:  intention,
+      intent_confidence: intention.intent_confidence,
+      status:            'pending',
     })
     .select()
     .single();
