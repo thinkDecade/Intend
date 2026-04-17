@@ -2,382 +2,429 @@
 
 import Link from 'next/link';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-/* ── Animation helpers ── */
-const easeOut = [0.25, 0.46, 0.45, 0.94] as const;
+/* ── Motion helpers ── */
+const ease = [0.16, 1, 0.3, 1] as const;
 
 const fade = {
-  hidden: { opacity: 0, y: 32 },
+  hidden: { opacity: 0, y: 28 },
   visible: (i: number = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, delay: i * 0.1, ease: easeOut as unknown as [number, number, number, number] },
+    transition: { duration: 0.75, delay: i * 0.08, ease: ease as unknown as [number, number, number, number] },
   }),
 };
 
-const stagger = {
-  visible: { transition: { staggerChildren: 0.12 } },
-};
+const stagger = { visible: { transition: { staggerChildren: 0.08 } } };
 
-// v0.5: 4 active primitives
+/* ── Primitives — all 8 shown, outcome-only copy ── */
 const primitives = [
-  { key: 'PROTECT', label: 'Protect', desc: 'Intend watches inflation and FX signals around the clock. When your savings are at risk, it alerts you and acts — before you know you need protection.' },
-  { key: 'CONVERT', label: 'Convert', desc: 'Best-rate asset exchange. Intend fetches live quotes, routes through the deepest pool, and executes. You just say what you want.' },
-  { key: 'SEND',    label: 'Send',    desc: 'Transfer value to any wallet or Intend user. Recipients without wallets get a secure claim link — no setup required on their end.' },
-  { key: 'SPEND',   label: 'Spend',   desc: 'Pay anywhere: card-enabled merchants, crypto checkout, or open payment protocols. One interface for everything.' },
+  {
+    key: 'PROTECT',
+    label: 'Protect',
+    body: 'Keep your money ahead of inflation and currency risk — without you watching the markets.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2.5 4 6v6c0 5 3.5 8.5 8 9.5 4.5-1 8-4.5 8-9.5V6l-8-3.5z"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'GROW',
+    label: 'Grow',
+    body: 'Put idle capital to work, automatically. Yield appears while you live your life.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 17 9 11l4 4 8-8"/>
+        <path d="M14 7h7v7"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'MOVE',
+    label: 'Move',
+    body: 'Send money to anyone, anywhere. They receive it — no wallets, no hoops, no delay.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 12h15"/>
+        <path d="m14 6 6 6-6 6"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'CONVERT',
+    label: 'Convert',
+    body: 'Exchange between any two currencies at the best available rate — instantly.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 3v14"/>
+        <path d="M3 7l4-4 4 4"/>
+        <path d="M17 21V7"/>
+        <path d="M13 17l4 4 4-4"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'SAVE',
+    label: 'Save',
+    body: 'Name a goal. Intend funds it on a rhythm you set, and tells you when you arrive.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <circle cx="12" cy="12" r="4"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'EARN',
+    label: 'Earn',
+    body: 'Incoming money lands intelligently. It gets routed the moment it arrives — never sits idle.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v12"/>
+        <path d="m6 9 6 6 6-6"/>
+        <path d="M5 21h14"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'INVEST',
+    label: 'Invest',
+    body: 'Buy and hold what you believe in. Clean cost basis, real-time P&L, no clutter.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="4" height="9"/>
+        <rect x="10" y="7" width="4" height="13"/>
+        <rect x="17" y="3" width="4" height="17"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'SPEND',
+    label: 'Spend',
+    body: 'Pay anyone, anywhere — card, crypto, or protocol. One way in. Every rail out.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="6" width="20" height="13" rx="2"/>
+        <path d="M2 11h20"/>
+        <path d="M6 15h3"/>
+      </svg>
+    ),
+  },
 ];
 
-const steps = [
-  { num: '01', title: 'Express your intention', body: 'Tell Intend what you want in plain language. "Protect my savings." "Send $200 to my sister." That\'s it.' },
-  { num: '02', title: 'Review the plan',        body: 'Intend builds a detailed execution plan — fees, timing, routing — and presents it for your approval. No surprises.' },
-  { num: '03', title: 'Confirm and done',        body: 'One tap to execute. Your money moves exactly where it should. You stay in complete control.' },
+const confidence = [
+  { n: '01', title: 'Keys stay encrypted.', body: 'Your private keys never touch our servers. They live in secure enclaves operated by Coinbase. We hold nothing you don\'t want us to.' },
+  { n: '02', title: 'Confirmation, always.', body: 'Every movement of value is previewed and explicitly confirmed — even in autonomous mode. You see exactly what will happen before it happens.' },
+  { n: '03', title: 'Live data, never stale.', body: 'Rates, prices and fees are fetched fresh before every execution. Hard staleness limits kill anything older than seconds.' },
+  { n: '04', title: 'Every action, receipted.', body: 'A full audit trail of every intent, plan and execution. You can inspect any decision Intend has made on your behalf.' },
 ];
 
-const stats = [
-  { value: '4',   label: 'Financial primitives — v0.5' },
-  { value: '6h',  label: 'PROTECT monitoring cycle' },
-  { value: '<1s', label: 'Intent interpretation' },
-  { value: '0',   label: 'Protocol knowledge required' },
+const channels = [
+  {
+    name: 'Telegram',
+    body: 'Message an intention. Get a plan back. Confirm with a tap. The quickest way in.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21 4-9 16-3-7-7-3z"/>
+      </svg>
+    ),
+  },
+  {
+    name: 'WhatsApp',
+    body: 'Same Intend, inside the app you already use every day. Arriving soon.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12a9 9 0 1 1-3.2-6.9L21 4l-1.1 3.3A9 9 0 0 1 21 12z"/>
+        <path d="M8.5 9.5c0 3 2 5 5 5l1.5-1-1.5-1.5a4 4 0 0 1-2.5-2.5L9.5 8z"/>
+      </svg>
+    ),
+  },
+  {
+    name: 'Web',
+    body: 'A calm dashboard. Streaming plans, live positions, every intent at a glance.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M3 12h18"/>
+        <path d="M12 3a14 14 0 0 1 0 18"/>
+        <path d="M12 3a14 14 0 0 0 0 18"/>
+      </svg>
+    ),
+  },
+];
+
+const tocItems = [
+  { id: 'hero', label: 'Start' },
+  { id: 'shift', label: 'The shift' },
+  { id: 'primitives', label: 'Primitives' },
+  { id: 'confidence', label: 'Confidence' },
+  { id: 'channels', label: 'Channels' },
+  { id: 'close', label: 'Begin' },
 ];
 
 export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 120]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 80]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
+  const [activeSection, setActiveSection] = useState<string>('hero');
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) setActiveSection(entry.target.id);
+        });
+      },
+      { rootMargin: '-40% 0px -55% 0px', threshold: 0 }
+    );
+    tocItems.forEach((t) => {
+      const el = document.getElementById(t.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <>
-      <div className="ambient" />
+    <div className="lp">
+      <div className="lp-bg" />
 
-      {/* ═══ NAV ═══ */}
+      {/* ═══ FLOATING PILL NAV ═══ */}
       <nav className="lp-nav">
-        <div className="lp-nav-inner">
-          <div className="lp-logo">intend</div>
-          <div className="lp-nav-links">
-            <a href="#how" className="lp-nav-link">How it works</a>
-            <a href="#primitives" className="lp-nav-link">Capabilities</a>
-            <Link href="/login" className="lp-nav-cta">Get started</Link>
-          </div>
+        <div className="lp-logo">
+          <span className="lp-logo-dot" />
+          Intend
         </div>
+        <div className="lp-nav-links">
+          <a href="#primitives" className="lp-nav-link">Primitives</a>
+          <a href="#confidence" className="lp-nav-link">Confidence</a>
+          <a href="#channels" className="lp-nav-link">Channels</a>
+        </div>
+        <Link href="/login" className="lp-nav-cta">Open app</Link>
       </nav>
 
-      {/* ═══ HERO ═══ */}
-      <section className="lp-hero" ref={heroRef}>
-        <motion.div
-          className="lp-hero-content"
-          style={{ y: heroY, opacity: heroOpacity }}
-        >
-          <motion.div
-            className="lp-hero-badge"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+      {/* ═══ RIGHT MINI-TOC ═══ */}
+      <div className="lp-toc" aria-hidden="true">
+        {tocItems.map((t) => (
+          <a
+            key={t.id}
+            href={`#${t.id}`}
+            className={`lp-toc-item${activeSection === t.id ? ' active' : ''}`}
           >
-            Finance, rebuilt around intentions
-          </motion.div>
+            <span className="lp-toc-label">{t.label}</span>
+            <span className="lp-toc-dot" />
+          </a>
+        ))}
+      </div>
 
+      {/* ═══ HERO ═══ */}
+      <section className="lp-hero" id="hero" ref={heroRef}>
+        <div className="lp-hero-visual" aria-hidden="true">
+          <div className="lp-orb lp-orb-1" />
+          <div className="lp-orb lp-orb-2" />
+          <div className="lp-orb lp-orb-3" />
+        </div>
+
+        <motion.div className="lp-hero-inner" style={{ y: heroY, opacity: heroOpacity }}>
           <motion.h1
             className="lp-hero-h1"
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: easeOut as unknown as [number, number, number, number] }}
+            transition={{ duration: 0.9, delay: 0.15, ease: ease as unknown as [number, number, number, number] }}
           >
-            Your money,
-            <br />
-            <span className="lp-hero-accent">executing your</span>
-            <br />
-            intentions.
+            Your money,<br />
+            <span className="lp-hero-h1-accent">executing</span><br />
+            your intentions.
           </motion.h1>
 
           <motion.p
             className="lp-hero-sub"
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.5 }}
+            transition={{ duration: 0.8, delay: 0.45 }}
           >
-            The smartest financial concierge on earth. Intend understands
-            your economic reality, acts on your intentions, and protects
-            your capital — before you know you need it.
+            Finance was built around products. Intend rebuilds it around intentions.
+            You define the outcome. Intend figures out how.
           </motion.p>
 
           <motion.div
             className="lp-hero-actions"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.7 }}
+            transition={{ duration: 0.7, delay: 0.65 }}
           >
             <Link href="/login" className="lp-btn-primary">
-              Get early access
+              Open app
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>
+              </svg>
             </Link>
-            <a href="#how" className="lp-btn-ghost">
-              See how it works
-            </a>
+            <a href="#primitives" className="lp-btn-ghost">See what it does</a>
           </motion.div>
         </motion.div>
 
-        {/* Decorative gradient orb */}
-        <div className="lp-hero-orb" />
-      </section>
-
-      {/* ═══ DIVIDER LINE ═══ */}
-      <div className="lp-divider" />
-
-      {/* ═══ ABOUT ═══ */}
-      <section className="lp-section">
+        {/* Trust chip */}
         <motion.div
-          className="lp-about"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-80px' }}
-          variants={stagger}
+          className="lp-trust-chip"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.9 }}
         >
-          <motion.div className="lp-section-tag" variants={fade}>
-            The vision
-          </motion.div>
-          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            For centuries, people have adapted themselves
-            to financial systems.
-          </motion.h2>
-          <motion.p className="lp-section-lead" variants={fade} custom={2}>
-            Intend reverses that relationship. You define the outcome.
-            Intend figures out how to achieve it.
-          </motion.p>
+          <span className="lp-trust-dot" />
+          <span className="lp-trust-text"><strong>Live</strong> · Private keys encrypted</span>
         </motion.div>
+
+        {/* Scroll orbit badge */}
+        <motion.a
+          href="#shift"
+          className="lp-scroll-badge"
+          aria-label="Scroll to content"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.7, delay: 1 }}
+        >
+          <svg className="lp-scroll-circle" viewBox="0 0 120 120">
+            <defs>
+              <path id="circlePath" d="M 60,60 m -46,0 a 46,46 0 1,1 92,0 a 46,46 0 1,1 -92,0" />
+            </defs>
+            <text fill="currentColor" fontSize="9" fontFamily="var(--font-mono)" fontWeight="500" letterSpacing="3">
+              <textPath href="#circlePath">SCROLL · EXPLORE · SCROLL · EXPLORE · </textPath>
+            </text>
+          </svg>
+          <span className="lp-scroll-arrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>
+            </svg>
+          </span>
+        </motion.a>
       </section>
 
-      {/* ═══ HOW IT WORKS ═══ */}
-      <section className="lp-section lp-section-dark" id="how">
-        <motion.div
-          className="lp-section-inner"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-60px' }}
-          variants={stagger}
-        >
-          <motion.div className="lp-section-tag" variants={fade}>
-            How it works
-          </motion.div>
-          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Three steps. Nothing more.
-          </motion.h2>
-
-          <div className="lp-steps">
-            {steps.map((s, i) => (
-              <motion.div
-                key={s.num}
-                className="lp-step"
-                variants={fade}
-                custom={i + 2}
-              >
-                <div className="lp-step-num">{s.num}</div>
-                <h3 className="lp-step-title">{s.title}</h3>
-                <p className="lp-step-body">{s.body}</p>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      </section>
-
-      {/* ═══ STATS BAR ═══ */}
-      <section className="lp-stats-bar">
-        <motion.div
-          className="lp-stats-inner"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-40px' }}
-          variants={stagger}
-        >
-          {stats.map((s, i) => (
-            <motion.div key={s.label} className="lp-stat" variants={fade} custom={i}>
-              <div className="lp-stat-val">{s.value}</div>
-              <div className="lp-stat-label">{s.label}</div>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* ═══ EXECUTION MODES ═══ */}
-      <section className="lp-section">
+      {/* ═══ THE SHIFT ═══ */}
+      <section className="lp-section" id="shift">
         <motion.div
           className="lp-section-inner"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: '-60px' }}
+          viewport={{ once: true, margin: '-100px' }}
           variants={stagger}
         >
-          <motion.div className="lp-section-tag" variants={fade}>
-            Execution modes
-          </motion.div>
-          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Your level of control. Your choice.
+          <motion.div className="lp-eyebrow" variants={fade}>The intention shift</motion.div>
+          <motion.h2 className="lp-h2" variants={fade} custom={1}>
+            For centuries, people adapted themselves to financial systems.<br />
+            <span className="lp-h2-accent">Intend reverses that.</span>
           </motion.h2>
-
-          <div className="lp-modes">
-            <motion.div className="lp-mode-card" variants={fade} custom={2}>
-              <div className="lp-mode-label">Semi-Autonomous <span className="lp-mode-default">default</span></div>
-              <p className="lp-mode-desc">
-                Intend builds the plan and presents it. You review, then confirm with one tap.
-                Trust is built through transparency — you always know what&apos;s about to happen.
-              </p>
-              <div className="lp-mode-trigger">Say: &ldquo;ask me before executing&rdquo;</div>
-            </motion.div>
-            <motion.div className="lp-mode-card lp-mode-auto" variants={fade} custom={3}>
-              <div className="lp-mode-label">Autonomous</div>
-              <p className="lp-mode-desc">
-                Intent in. Outcome out. Intend executes immediately and sends you a receipt.
-                For users who want zero friction and have established trust.
-              </p>
-              <div className="lp-mode-trigger">Say: &ldquo;go autonomous&rdquo;</div>
-            </motion.div>
-          </div>
-          <motion.p className="lp-modes-note" variants={fade} custom={4}>
-            Switch modes any time — from settings or mid-conversation. PROTECT always asks first, no matter what.
+          <motion.p className="lp-lead" variants={fade} custom={2}>
+            You say what you want to happen. Intend reads your position, builds a plan, shows
+            you the outcome, and executes — across currencies, rails and continents. No
+            protocols. No jargon. No translation work.
           </motion.p>
         </motion.div>
       </section>
 
       {/* ═══ PRIMITIVES ═══ */}
-      <section className="lp-section lp-section-dark" id="primitives">
+      <section className="lp-section" id="primitives">
         <motion.div
           className="lp-section-inner"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: '-60px' }}
+          viewport={{ once: true, margin: '-80px' }}
           variants={stagger}
         >
-          <motion.div className="lp-section-tag" variants={fade}>
-            Capabilities
-          </motion.div>
-          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Four things your money can do — right now.
+          <motion.div className="lp-eyebrow" variants={fade}>Eight primitives</motion.div>
+          <motion.h2 className="lp-h2" variants={fade} custom={1}>
+            Everything your money should know how to do.
           </motion.h2>
 
           <div className="lp-prim-grid">
             {primitives.map((p, i) => (
-              <motion.div
-                key={p.key}
-                className="lp-prim-card"
-                variants={fade}
-                custom={i + 2}
-              >
+              <motion.div key={p.key} className="lp-prim-card" variants={fade} custom={i + 2}>
+                <div className="lp-prim-icon">{p.icon}</div>
                 <div className="lp-prim-label">{p.label}</div>
-                <div className="lp-prim-desc">{p.desc}</div>
-                <div className="lp-prim-arrow">&#8599;</div>
+                <div className="lp-prim-desc">{p.body}</div>
               </motion.div>
             ))}
           </div>
         </motion.div>
       </section>
 
-      {/* ═══ SHOWCASE / DEMO ═══ */}
-      <section className="lp-section lp-section-dark">
+      {/* ═══ CONFIDENCE ═══ */}
+      <section className="lp-section" id="confidence">
         <motion.div
           className="lp-section-inner"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: '-60px' }}
+          viewport={{ once: true, margin: '-80px' }}
           variants={stagger}
         >
-          <motion.div className="lp-section-tag" variants={fade}>
-            Experience
-          </motion.div>
-          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Natural language. Real execution.
+          <motion.div className="lp-eyebrow" variants={fade}>Why you can trust autonomous</motion.div>
+          <motion.h2 className="lp-h2" variants={fade} custom={1}>
+            Autonomy is a promise.<br />
+            <span className="lp-h2-accent">We keep it with four guarantees.</span>
           </motion.h2>
 
-          <motion.div className="lp-showcase" variants={fade} custom={2}>
-            <div className="lp-showcase-chat">
-              {/* Proactive PROTECT alert — Intend acts before user asks */}
-              <div className="lp-chat-msg lp-chat-agent lp-chat-proactive">
-                <div className="lp-chat-agent-label">⚡ intend noticed something</div>
-                The cedi has lost 4.2% against the dollar this week and inflation
-                is running at 18.4%. Your $1,200 in savings is exposed.
-              </div>
-              <div className="lp-chat-plan">
-                <div className="lp-plan-row">
-                  <span className="lp-plan-key">Action</span>
-                  <span className="lp-plan-val">Protect $1,200</span>
-                </div>
-                <div className="lp-plan-row">
-                  <span className="lp-plan-key">Protection from</span>
-                  <span className="lp-plan-val">~18% annual purchasing-power loss</span>
-                </div>
-                <div className="lp-plan-row">
-                  <span className="lp-plan-key">Yield while protected</span>
-                  <span className="lp-plan-val lp-plan-green">4.8% APY</span>
-                </div>
-                <div className="lp-plan-row">
-                  <span className="lp-plan-key">Fee</span>
-                  <span className="lp-plan-val">$0.14</span>
-                </div>
-              </div>
-              <div className="lp-chat-confirm lp-chat-confirm-two">
-                <div className="lp-confirm-btn">Protect my savings &#8594;</div>
-                <div className="lp-dismiss-btn">Not now</div>
-              </div>
-            </div>
-          </motion.div>
+          <div className="lp-conf-grid">
+            {confidence.map((c, i) => (
+              <motion.div key={c.n} className="lp-conf-item" variants={fade} custom={i + 2}>
+                <div className="lp-conf-num">{c.n} —</div>
+                <div className="lp-conf-title">{c.title}</div>
+                <div className="lp-conf-body">{c.body}</div>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
       </section>
 
       {/* ═══ CHANNELS ═══ */}
-      <section className="lp-section">
+      <section className="lp-section" id="channels">
         <motion.div
           className="lp-section-inner"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: '-60px' }}
+          viewport={{ once: true, margin: '-80px' }}
           variants={stagger}
         >
-          <motion.div className="lp-section-tag" variants={fade}>
-            Channels
-          </motion.div>
-          <motion.h2 className="lp-section-h2" variants={fade} custom={1}>
-            Telegram and Web. More coming.
+          <motion.div className="lp-eyebrow" variants={fade}>Meet you where you are</motion.div>
+          <motion.h2 className="lp-h2" variants={fade} custom={1}>
+            One Intend. Three ways in.
           </motion.h2>
-          <motion.p className="lp-section-lead" variants={fade} custom={2}>
-            One account. Two channels for v0.5. Your financial state follows you
-            seamlessly — no context lost, ever.
-          </motion.p>
 
-          <div className="lp-channels">
-            {[
-              { name: 'Telegram', icon: '💬', desc: 'Message your intentions directly in chat. The fastest way to act.', live: true },
-              { name: 'Web App',  icon: '🌐', desc: 'Full dashboard with streaming plan previews and one-tap execution.', live: true },
-              { name: 'WhatsApp', icon: '📱', desc: 'In development — same Intend experience on a third channel.', live: false },
-            ].map((ch, i) => (
-              <motion.div key={ch.name} className={`lp-channel-card${ch.live ? '' : ' lp-channel-dim'}`} variants={fade} custom={i + 3}>
-                <div className="lp-channel-icon">{ch.icon}</div>
-                <div className="lp-channel-name">{ch.name}{ch.live ? '' : ' ·\u00a0soon'}</div>
-                <div className="lp-channel-desc">{ch.desc}</div>
+          <div className="lp-ch-grid">
+            {channels.map((c, i) => (
+              <motion.div key={c.name} className="lp-ch-card" variants={fade} custom={i + 2}>
+                <div className="lp-ch-icon">{c.icon}</div>
+                <div className="lp-ch-name">{c.name}</div>
+                <div className="lp-ch-desc">{c.body}</div>
               </motion.div>
             ))}
           </div>
         </motion.div>
       </section>
 
-      {/* ═══ BOTTOM CTA ═══ */}
-      <section className="lp-cta-section">
+      {/* ═══ CLOSING CTA ═══ */}
+      <section className="lp-cta" id="close">
         <motion.div
           className="lp-cta-inner"
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: '-40px' }}
+          viewport={{ once: true, margin: '-60px' }}
           variants={stagger}
         >
           <motion.h2 className="lp-cta-h2" variants={fade}>
-            Finance, built around
-            <br />
-            <span className="lp-hero-accent">your intentions.</span>
+            Define your outcome.<br />
+            <span className="lp-hero-h1-accent">Intend does the rest.</span>
           </motion.h2>
           <motion.p className="lp-cta-sub" variants={fade} custom={1}>
-            Stop adapting to financial products. Let your money adapt to you.
+            The smartest financial concierge on earth is ready to meet your money.
           </motion.p>
           <motion.div variants={fade} custom={2}>
             <Link href="/login" className="lp-btn-primary lp-btn-lg">
-              Get early access
+              Open app
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>
+              </svg>
             </Link>
           </motion.div>
         </motion.div>
@@ -387,20 +434,20 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
-            <div className="lp-logo">intend</div>
-            <div className="lp-footer-tagline">Your money, executing your intentions.</div>
+            <div className="lp-logo">
+              <span className="lp-logo-dot" />
+              Intend
+            </div>
+            <div className="lp-footer-tag">Your money, executing your intentions.</div>
           </div>
           <div className="lp-footer-links">
-            <a href="#how" className="lp-footer-link">How it works</a>
-            <a href="#primitives" className="lp-footer-link">Capabilities</a>
+            <a href="#primitives" className="lp-footer-link">Primitives</a>
+            <a href="#confidence" className="lp-footer-link">Confidence</a>
             <Link href="/login" className="lp-footer-link">Sign in</Link>
           </div>
-          <div className="lp-footer-bottom">
-            <span className="lp-footer-copy">&copy; 2026 Intend</span>
-            <span className="lp-footer-ver">v0.5</span>
-          </div>
+          <div className="lp-footer-meta">v0.5</div>
         </div>
       </footer>
-    </>
+    </div>
   );
 }
