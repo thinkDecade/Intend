@@ -1993,87 +1993,98 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; bac
   border-top: 1px solid var(--stroke);
 }
 
-.app-nav-channel-box {
-  padding: 14px;
+/* ── "Take Intend with you" channel block ─────────────────────────────── */
+.app-nav-channels {
+  padding: 12px;
   background: var(--surface);
-  border-radius: 10px;
-  margin-bottom: 4px;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  margin-bottom: 8px;
 }
 
-.app-nav-channel-label {
-  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
-  font-size: 9px;
+.app-nav-channels-heading {
+  font-family: var(--font-display, 'Outfit'), sans-serif;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 10px;
+  color: var(--text2);
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
 }
 
-.app-nav-channel-btns {
+.app-nav-channels-row {
   display: flex;
-  flex-direction: column;
   gap: 6px;
 }
 
-.app-nav-channel-btn {
+.app-nav-channel-pill {
+  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 7px 12px;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
   border-radius: 8px;
   border: 1px solid var(--stroke-2);
   background: var(--pearl-0);
   color: var(--text2);
-  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-family: var(--font-display, 'Outfit'), sans-serif;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   text-decoration: none;
   transition: all 0.18s;
+  white-space: nowrap;
 }
-.app-nav-channel-btn--active:hover {
-  background: rgba(212, 162, 74, 0.08);
-  border-color: var(--accent);
+.app-nav-channel-pill--active {
+  border-color: rgba(212,162,74,0.4);
+  background: rgba(212,162,74,0.06);
   color: var(--accent);
 }
-.app-nav-channel-btn--disabled {
-  opacity: 0.45;
+.app-nav-channel-pill--active:hover {
+  background: rgba(212,162,74,0.12);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212,162,74,0.2);
+}
+.app-nav-channel-pill--soon {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.app-nav-soon {
-  font-size: 8px;
-  font-style: italic;
-  opacity: 0.6;
+/* ── Footer icon row — settings + profile ─────────────────────────────── */
+.app-nav-footer-row {
+  display: flex;
+  gap: 6px;
 }
 
-.app-nav-settings-link {
+.app-nav-footer-btn {
+  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text4);
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke-2);
+  background: transparent;
+  color: var(--text3);
+  font-family: var(--font-display, 'Outfit'), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
   transition: all 0.18s;
 }
-.app-nav-settings-link:hover {
+.app-nav-footer-btn:hover {
   background: var(--surface2);
-  color: var(--text2);
+  color: var(--text);
+  border-color: var(--stroke-2);
 }
-
-.app-nav-settings-icon {
-  opacity: 0.3;
-  transition: opacity 0.18s;
+.app-nav-footer-btn--active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
 }
-.app-nav-settings-link:hover .app-nav-settings-icon { opacity: 0.9; }
 
 /* ═══════════════════════════════════════════════════════════════════════
    REALITY PANEL (right slide-in)
@@ -2391,6 +2402,54 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; bac
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--accent-dim);
+}
+
+/* ── Action chips (above input, when conversation is active) ──────────── */
+.action-chips {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.action-chip {
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--stroke-2);
+  background: var(--glass);
+  font-family: var(--font-display, 'Outfit'), sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.action-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-dim);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.action-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.action-chip--clear {
+  margin-left: auto;
+  color: var(--text4);
+  border-color: transparent;
+  background: transparent;
+  font-size: 11px;
+  padding: 7px 10px;
+}
+.action-chip--clear:hover:not(:disabled) {
+  border-color: var(--red, #e53e3e);
+  color: var(--red, #e53e3e);
+  background: rgba(229,62,62,0.06);
+  transform: none;
+  box-shadow: none;
 }
 
 /* Role label row */

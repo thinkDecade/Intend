@@ -23,16 +23,31 @@ interface Message {
 }
 
 const SUGGESTIONS = [
-  { icon: '↗', label: 'Send $300 to Kwame',                primitive: 'MOVE' },
-  { icon: '↑', label: 'Grow $500 at best rate',            primitive: 'GROW' },
-  { icon: '⬡', label: 'Protect my savings from inflation', primitive: 'PROTECT' },
-  { icon: '$', label: 'Convert 1 ETH to USDC',             primitive: 'CONVERT' },
+  { label: 'Send $300 to Kwame',                primitive: 'MOVE' },
+  { label: 'Grow $500 at best rate',            primitive: 'GROW' },
+  { label: 'Protect my savings from inflation', primitive: 'PROTECT' },
+  { label: 'Convert 1 ETH to USDC',             primitive: 'CONVERT' },
 ];
+
+const ACTION_CHIPS = [
+  { label: 'Add funds',  message: 'I want to add funds to my account' },
+  { label: 'Pay',        message: 'I want to make a payment' },
+  { label: 'Transfer',   message: 'I want to transfer money' },
+];
+
+const STORAGE_KEY = 'intend:chat_messages';
 
 // ── ChatPanel ──────────────────────────────────────────────────────────────
 
 export default function ChatPanel({ userId }: { userId: string | null }) {
-  const [messages, setMessages]       = useState<Message[]>([]);
+  const [messages, setMessages]       = useState<Message[]>(() => {
+    // Restore conversation from sessionStorage on mount
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      return stored ? (JSON.parse(stored) as Message[]) : [];
+    } catch { return []; }
+  });
   const [input, setInput]             = useState('');
   const [isStreaming, setStreaming]   = useState(false);
   const [confirmingId, setConfirming] = useState<string | null>(null);
@@ -41,6 +56,15 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
   // Keep a stable ref to messages so sendMessage can read current history
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
+
+  // Persist messages to sessionStorage whenever they change
+  useEffect(() => {
+    try {
+      // Only store completed messages (not streaming ones) to avoid partial state
+      const toStore = messages.filter(m => m.status !== 'streaming');
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+    } catch { /* ignore quota errors */ }
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -215,7 +239,7 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
 
       {/* Input area */}
       <div className="input-area">
-        {isEmpty && (
+        {isEmpty ? (
           <div className="suggestions">
             {SUGGESTIONS.map(s => (
               <button
@@ -227,6 +251,30 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
                 {s.label}
               </button>
             ))}
+          </div>
+        ) : (
+          <div className="action-chips">
+            {ACTION_CHIPS.map(a => (
+              <button
+                key={a.label}
+                className="action-chip"
+                disabled={isStreaming}
+                onClick={() => void sendMessage(a.message)}
+              >
+                {a.label}
+              </button>
+            ))}
+            <button
+              className="action-chip action-chip--clear"
+              disabled={isStreaming}
+              onClick={() => {
+                setMessages([]);
+                sessionStorage.removeItem(STORAGE_KEY);
+              }}
+              title="Clear conversation"
+            >
+              Clear
+            </button>
           </div>
         )}
 
