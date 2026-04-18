@@ -97,19 +97,35 @@ export async function signInWithOtp(formData: FormData) {
       const otp       = data?.properties?.email_otp ?? null;
       const magicLink = data?.properties?.action_link ?? null;
 
+      // Determine from address — use custom domain if configured, else Resend sandbox
+      const fromAddress = process.env['RESEND_FROM_EMAIL'] ?? 'Intend <onboarding@resend.dev>';
+
       const resend = new Resend(resendKey);
       const { error: emailError } = await resend.emails.send({
-        from:    'Intend <onboarding@resend.dev>',
+        from:    fromAddress,
         to:      email,
         subject: otp ? `${otp} — Your Intend sign-in code` : 'Your Intend sign-in link',
         html:    buildEmailHtml(otp, magicLink),
       });
 
-      if (emailError) {
-        console.error('[signInWithOtp] PATH A: Resend failed:', JSON.stringify(emailError));
-        // Specific Resend error to help debugging
-        const msg = (emailError as { message?: string }).message ?? String(emailError);
-        return { error: `Email delivery failed: ${msg}` };
+      if (!emailError) return { success: true };
+
+      // Resend failed (likely sandbox mode / unverified domain).
+      // Fall back to Supabase built-in email.
+      // NOTE: admin.generateLink uses service-role and does NOT increment Supabase's
+      // email rate limiter, so calling signInWithOtp here is safe.
+      console.warn('[signInWithOtp] PATH A: Resend failed:', JSON.stringify(emailError), '— falling back to Supabase email');
+
+      const cookieStoreFallback = await cookies();
+      const supabaseFallback    = createClient(cookieStoreFallback);
+      const { error: fallbackErr } = await supabaseFallback.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback?next=/app` },
+      });
+
+      if (fallbackErr) {
+        console.error('[signInWithOtp] Supabase fallback also failed:', fallbackErr.message);
+        return { error: 'Could not send sign-in email. Please try again in a moment.' };
       }
 
       return { success: true };
