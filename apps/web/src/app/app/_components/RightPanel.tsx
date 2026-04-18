@@ -1,7 +1,15 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface InsightItem {
+  id:        string;
+  type:      'risk' | 'opportunity' | 'market';
+  text:      string;
+  timestamp: string;
+}
 
 interface PortfolioSummary {
   total_usd:     number;
@@ -10,16 +18,105 @@ interface PortfolioSummary {
   protected_usd: number;
 }
 
+// ── Mini SVG chart ─────────────────────────────────────────────────────────
+
+function MiniChart({ type }: { type: InsightItem['type'] }) {
+  const points = useMemo(() => Array.from({ length: 12 }, () => Math.random() * 20), []);
+  const pathParts = points.slice(1).map((p, i) => `${(i + 1) * 6},${20 - p}`).join(' L ');
+  const firstPt  = points[0] ?? 10;
+  const lastPt   = points[11] ?? 10;
+  const color =
+    type === 'risk'        ? '#ef4444' :
+    type === 'opportunity' ? '#D4A24A' :
+                             '#a1a1aa';
+  return (
+    <svg width="70" height="25" style={{ opacity: 0.45, flexShrink: 0 }}>
+      <path
+        d={`M 0,${20 - firstPt} L ${pathParts}`}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="66" cy={20 - lastPt} r="2" fill={color} />
+    </svg>
+  );
+}
+
+// ── Inline icon helpers ────────────────────────────────────────────────────
+
+function GlobeIcon({ size = 13, color = 'var(--accent)' }: { size?: number; color?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size}>
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="2" y1="12" x2="22" y2="12"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+  );
+}
+
+function ZapIcon({ size = 11, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+  );
+}
+
+function ShieldAlertIcon({ size = 11, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  );
+}
+
+function TrendingUpIcon({ size = 11, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size}>
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+      <polyline points="17 6 23 6 23 12"/>
+    </svg>
+  );
+}
+
+function ActivityIcon({ size = 11, color = 'var(--accent)' }: { size?: number; color?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size}>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  );
+}
+
+function XIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width={size} height={size}>
+      <line x1="18" y1="6" x2="6" y2="18"/>
+      <line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  );
+}
+
+// ── RightPanel / RealityPanel ──────────────────────────────────────────────
+
 export default function RightPanel({
   userId,
   open,
+  onDismiss,
 }: {
-  userId: string | null;
-  open:   boolean;
+  userId:     string | null;
+  open:       boolean;
+  onDismiss?: () => void;
 }) {
-  const pathname  = usePathname();
-  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
+  const [insights, setInsights]       = useState<InsightItem[]>([]);
+  const [inflationRate, setInflation] = useState(3.42);
+  const [portfolio, setPortfolio]     = useState<PortfolioSummary | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Fetch portfolio summary
   const refresh = useCallback(async () => {
     if (!userId) return;
     try {
@@ -30,137 +127,150 @@ export default function RightPanel({
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Generate insight feed
+  useEffect(() => {
+    const pool = [
+      'CPI Data: Inflation sticky at 3.4%. Purchasing power decaying.',
+      'USD liquidity tightening. Yield spreads expanding on Base.',
+      'Real yields in legacy banking remain negative.',
+      'PROTECT Logic: Shifting idle USDC to Aave V3 yield vectors.',
+      'Gold parity sync: PAXG providing superior inflation hedge.',
+      'Global debt-to-GDP alert: Portfolio de-risking initiated.',
+      'Forward Signal: Economic trajectory reflects gradual deterioration.',
+      'Base network gas: 0.08 gwei — optimal execution window.',
+    ];
+
+    const make = (text?: string): InsightItem => ({
+      id:        Math.random().toString(36).slice(2, 9),
+      type:      Math.random() > 0.7 ? 'risk' : Math.random() > 0.4 ? 'opportunity' : 'market',
+      text:      text ?? pool[Math.floor(Math.random() * pool.length)] ?? '',
+      timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' }),
+    });
+
+    setInsights(pool.slice(0, 4).map(t => make(t)));
+
+    const interval = setInterval(() => {
+      setInsights(prev => [make(), ...prev].slice(0, 10));
+      setInflation(prev => parseFloat((prev + (Math.random() - 0.5) * 0.05).toFixed(2)));
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!open) return null;
+
+  const retentionPct = portfolio?.earning_usd && portfolio?.total_usd
+    ? Math.min(100, Math.round((portfolio.earning_usd / portfolio.total_usd) * 100))
+    : 98.2;
+
+  const macros: Array<{
+    label: string;
+    value: string;
+    sub: string;
+    color: string;
+    icon: React.ReactNode;
+  }> = [
+    { label: 'Avg Inflation', value: `${inflationRate}%`, sub: 'CPI', color: 'var(--red)',   icon: <ShieldAlertIcon color="var(--red)" /> },
+    { label: 'Hedge Score',   value: '0.72',              sub: 'LVL', color: 'var(--text)',   icon: <ZapIcon color="var(--text)" /> },
+    { label: 'Real Yield',    value: '+1.8%',             sub: 'NET', color: 'var(--accent)', icon: <TrendingUpIcon color="var(--accent)" /> },
+    { label: 'FX Trend',      value: 'STABLE',            sub: 'SYS', color: 'var(--text)',   icon: <GlobeIcon size={11} color="var(--text)" /> },
+  ];
+
   return (
-    <aside
-      className="right-panel"
-      style={{
-        width:      open ? 280 : 0,
-        flexShrink: 0,
-        overflow:   'hidden',
-        borderLeft: open ? '1px solid var(--border)' : 'none',
-        transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1)',
-        background: 'var(--bg3)',
-        display:    'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* Only render inner content when open (avoids layout flash) */}
-      {open && (
-        <>
-          <div className="panel-header">
-            <div className="panel-label">{panelLabel(pathname)}</div>
-          </div>
-          <div className="panel-blocks">
-            {renderBlocks(pathname, portfolio)}
-          </div>
-        </>
-      )}
-    </aside>
-  );
-}
-
-function panelLabel(pathname: string): string {
-  if (pathname.startsWith('/app/history'))  return 'Summary';
-  if (pathname.startsWith('/app/goals'))    return 'Allocations';
-  if (pathname.startsWith('/app/settings')) return 'Account';
-  return 'Overview';
-}
-
-function renderBlocks(pathname: string, p: PortfolioSummary | null) {
-  const total     = p?.total_usd     ?? 0;
-  const available = p?.available_usd ?? 0;
-  const earning   = p?.earning_usd   ?? 0;
-  const availPct  = total > 0 ? Math.round((available / total) * 100) : 0;
-
-  if (pathname.startsWith('/app/history')) {
-    return (
-      <>
-        <div className="panel-block">
-          <div className="panel-block-label">This month</div>
-          <div className="panel-block-val">—</div>
-          <div className="panel-block-sub">Intents executed</div>
+    <div className="reality-panel">
+      {/* Header */}
+      <div className="reality-header">
+        <div className="reality-header-left">
+          <GlobeIcon />
+          <span className="reality-title">Economic Reality</span>
         </div>
-        <div className="panel-block highlight">
-          <div className="panel-block-label">Total moved</div>
-          <div className="panel-block-val">—</div>
-          <div className="panel-block-sub">Across all transfers</div>
-        </div>
-      </>
-    );
-  }
-
-  if (pathname.startsWith('/app/goals')) {
-    return (
-      <>
-        <div className="panel-block">
-          <div className="panel-block-label">Total</div>
-          <div className="panel-block-val">{total > 0 ? `$${fmt(total)}` : '—'}</div>
-          <div className="panel-block-sub">Net worth in Intend</div>
-        </div>
-        <div className="panel-block highlight">
-          <div className="panel-block-label">Earning</div>
-          <div className="panel-block-val">{earning > 0 ? `$${fmt(earning)}` : '—'}</div>
-          <div className="panel-block-sub">Deployed to yield</div>
-        </div>
-        {earning > 0 && (
-          <div className="insight-card">
-            <div className="insight-icon">✦</div>
-            <div className="insight-text">
-              Your money is working. Keep growing it with Intend.
-            </div>
-          </div>
-        )}
-      </>
-    );
-  }
-
-  if (pathname.startsWith('/app/settings')) {
-    return (
-      <div className="panel-block">
-        <div className="panel-block-label">Status</div>
-        <div className="panel-block-val" style={{ fontSize: 14, fontFamily: 'var(--font-sans)' }}>Active</div>
-        <div className="panel-block-sub">All systems operational</div>
-      </div>
-    );
-  }
-
-  // Default overview
-  return (
-    <>
-      <div className="panel-block">
-        <div className="panel-block-label">Total balance</div>
-        <div className="panel-block-val">{total > 0 ? `$${fmt(total)}` : '—'}</div>
-        <div className="panel-block-sub">Across all allocations</div>
-      </div>
-
-      <div className="panel-block highlight">
-        <div className="panel-block-label">Available</div>
-        <div className="panel-block-val">{available > 0 ? `$${fmt(available)}` : '—'}</div>
-        <div className="panel-block-sub">Ready to use now</div>
-        {total > 0 && (
-          <div className="panel-change">
-            <div className="change-bar">
-              <div className="change-fill" style={{ width: `${availPct}%` }} />
-            </div>
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>
-              {availPct}%
-            </span>
-          </div>
+        {onDismiss && (
+          <button className="reality-dismiss" onClick={onDismiss} aria-label="Dismiss">
+            <XIcon />
+          </button>
         )}
       </div>
 
-      {earning > 0 && (
-        <div className="insight-card">
-          <div className="insight-icon">✦</div>
-          <div className="insight-text">
-            <strong>${fmt(earning)}</strong> is actively earning yield for you right now.
+      {/* Macro indicators grid */}
+      <div className="reality-macros">
+        {macros.map(m => (
+          <div key={m.label} className="reality-macro-card">
+            <div className="reality-macro-top">
+              <span className="tech-label" style={{ opacity: 0.6 }}>{m.label}</span>
+              <span style={{ opacity: 0.5 }}>{m.icon}</span>
+            </div>
+            <div className="reality-macro-val-row">
+              <span className="reality-macro-val font-heading" style={{ color: m.color }}>{m.value}</span>
+              <span className="reality-macro-sub">{m.sub}</span>
+            </div>
           </div>
-        </div>
-      )}
-    </>
-  );
-}
+        ))}
+      </div>
 
-function fmt(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      {/* Signals feed */}
+      <div className="reality-feed-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ActivityIcon />
+          <span className="tech-label" style={{ opacity: 0.7 }}>Execution Signals</span>
+        </div>
+        <div className="reality-synced">
+          <span className="reality-synced-dot" />
+          <span className="tech-label" style={{ opacity: 0.4 }}>SYNCED</span>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="reality-feed scrollbar-hide">
+        {insights.map(insight => (
+          <div key={insight.id} className="reality-insight-card">
+            <div className="reality-insight-top">
+              <div className="reality-insight-type-row">
+                <span
+                  className="reality-type-dot"
+                  style={{
+                    background:
+                      insight.type === 'risk'        ? '#ef4444' :
+                      insight.type === 'opportunity' ? 'var(--accent)' :
+                      'var(--text4)',
+                  }}
+                />
+                <span
+                  className="tech-label"
+                  style={{
+                    color:
+                      insight.type === 'risk'        ? '#ef4444' :
+                      insight.type === 'opportunity' ? 'var(--accent)' :
+                      'var(--text4)',
+                  }}
+                >
+                  {insight.type}
+                </span>
+              </div>
+              <span className="reality-insight-time">{insight.timestamp}</span>
+            </div>
+            <div className="reality-insight-body">
+              <p className="reality-insight-text">{insight.text}</p>
+              <MiniChart type={insight.type} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Purchasing power footer */}
+      <div className="reality-footer">
+        <div className="reality-footer-header">
+          <span className="reality-footer-label font-heading">Purchasing Power Retention</span>
+          <span className="reality-footer-pct">{retentionPct}%</span>
+        </div>
+        <div className="reality-footer-bar-track">
+          <div
+            className="reality-footer-bar-fill"
+            style={{ width: `${retentionPct}%` }}
+          />
+        </div>
+        <p className="reality-footer-note">
+          Neutralizing inflationary decay via automated yield vectors.
+        </p>
+      </div>
+    </div>
+  );
 }

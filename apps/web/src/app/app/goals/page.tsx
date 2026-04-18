@@ -29,7 +29,10 @@ export default async function GoalsPage() {
 
   return (
     <div className="page">
-      <div className="page-title">Portfolio</div>
+      <p className="tech-label" style={{ color: 'var(--accent)', marginBottom: 10 }}>
+        INTELLIGENCE CONSOLE // PORTFOLIO_SURFACE
+      </p>
+      <div className="page-title font-heading">Your Asset Registry</div>
       <div className="page-sub">A clear view of your money.</div>
 
       {isEmpty ? (

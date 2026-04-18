@@ -2,8 +2,6 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import { getUserByEmail, createUser } from '@intend/data';
-import NavPanel from './_components/NavPanel';
-import TopBar from './_components/TopBar';
 import AppShell from './_components/AppShell';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -13,16 +11,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect('/login');
 
-  const email    = user.email ?? '';
-  const initials = email.slice(0, 2).toUpperCase();
-  const greeting = getGreeting();
+  const email = user.email ?? '';
 
   // Look up or auto-create internal user record
   let dbUser = email
     ? await getUserByEmail(email).catch(() => null)
     : null;
 
-  // Auto-create if missing (fallback for users who signed up before this was wired)
   if (!dbUser && email) {
     try {
       dbUser = await createUser({
@@ -39,22 +34,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <div className="ambient" />
-      <div className="shell">
-        <NavPanel />
-        <div className="main">
-          <TopBar greeting={greeting} initials={initials} />
-          <AppShell userId={userId}>
-            {children}
-          </AppShell>
-        </div>
-      </div>
+      <AppShell userId={userId}>
+        {children}
+      </AppShell>
     </>
   );
-}
-
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
 }

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import RightPanel from './RightPanel';
+import { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import NavPanel from './NavPanel';
+import RealityPanel from './RightPanel';
 
 export default function AppShell({
   children,
@@ -10,37 +12,63 @@ export default function AppShell({
   children: React.ReactNode;
   userId:   string | null;
 }) {
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [showReality, setShowReality] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Initialise theme from localStorage / prefers-color-scheme
+  useEffect(() => {
+    const saved = localStorage.getItem('intend-theme');
+    if (saved === 'light' || saved === 'dark') {
+      setTheme(saved);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark');
+    }
+  }, []);
+
+  // Apply theme class to <html>
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    localStorage.setItem('intend-theme', theme);
+  }, [theme]);
+
+  // Mouse edge detection — show reality panel on right edge hover
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (e.clientX >= window.innerWidth - 10 && !showReality) {
+        setShowReality(true);
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [showReality]);
 
   return (
-    <div className="content">
-      {/* Main content column */}
-      <div className="chat-col">
+    <div className="app-shell-outer">
+      {/* Left sidebar */}
+      <NavPanel theme={theme} setTheme={setTheme} />
+
+      {/* Center main */}
+      <main className="app-shell-main">
         {children}
-      </div>
+      </main>
 
-      {/* Collapse toggle — sits at the seam between content and panel */}
-      <button
-        className="panel-collapse-btn"
-        onClick={() => setPanelOpen(o => !o)}
-        title={panelOpen ? 'Collapse panel' : 'Expand panel'}
-        aria-label={panelOpen ? 'Collapse panel' : 'Expand panel'}
-      >
-        {panelOpen ? (
-          /* chevron right — collapse */
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        ) : (
-          /* chevron left — expand */
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
+      {/* Right reality panel — slide in/out */}
+      <AnimatePresence>
+        {showReality && (
+          <motion.div
+            key="reality-panel"
+            initial={{ x: 340, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 340, opacity: 0 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+            className="app-shell-right"
+          >
+            <RealityPanel userId={userId} open={true} onDismiss={() => setShowReality(false)} />
+          </motion.div>
         )}
-      </button>
-
-      {/* Right panel */}
-      <RightPanel userId={userId} open={panelOpen} />
+      </AnimatePresence>
     </div>
   );
 }

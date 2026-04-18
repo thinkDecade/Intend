@@ -4,55 +4,23 @@
  * DELETE before shipping to production.
  */
 
+'use client';
+
+import { useState } from 'react';
 import NavPanel from '../app/_components/NavPanel';
-import TopBar from '../app/_components/TopBar';
 import ChatPanel from '../app/_components/ChatPanel';
 
 export default function PreviewPage() {
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
   return (
     <>
       <div className="ambient" />
-      <div className="shell">
-        <NavPanel />
-        <div className="main">
-          <TopBar greeting="Good afternoon" initials="KA" />
-          <div className="content">
-            <div className="chat-col">
-              <ChatPanel userId={null} />
-            </div>
-
-            {/* Right panel — static mock */}
-            <aside className="right-panel" style={{ width: 280, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--bg3)', display: 'flex', flexDirection: 'column' }}>
-              <div className="panel-header">
-                <div className="panel-label">Overview</div>
-              </div>
-              <div className="panel-blocks">
-                <div className="panel-block">
-                  <div className="panel-block-label">Total balance</div>
-                  <div className="panel-block-val">$1,740</div>
-                  <div className="panel-block-sub">Across all allocations</div>
-                </div>
-                <div className="panel-block highlight">
-                  <div className="panel-block-label">Available</div>
-                  <div className="panel-block-val">$1,240</div>
-                  <div className="panel-block-sub">Ready to use now</div>
-                  <div className="panel-change">
-                    <div className="change-bar">
-                      <div className="change-fill" style={{ width: '71%' }} />
-                    </div>
-                    <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-mono)' }}>71%</span>
-                  </div>
-                </div>
-                <div className="insight-card">
-                  <div className="insight-icon">✦</div>
-                  <div className="insight-text">
-                    Your <strong>$500</strong> is earning <strong>$2.40/week</strong> at 5.8%.
-                  </div>
-                </div>
-              </div>
-            </aside>
-          </div>
-        </div>
+      <div className="app-shell-outer">
+        <NavPanel theme={theme} setTheme={setTheme} />
+        <main className="app-shell-main">
+          <ChatPanel userId={null} />
+        </main>
       </div>
     </>
   );

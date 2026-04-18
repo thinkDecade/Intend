@@ -32,7 +32,10 @@ export default async function HistoryPage() {
 
   return (
     <div className="page">
-      <div className="page-title">Activity</div>
+      <p className="tech-label" style={{ color: 'var(--accent)', marginBottom: 10 }}>
+        INTELLIGENCE CONSOLE // ARCHIVE_SURFACE
+      </p>
+      <div className="page-title font-heading">Your Ledger</div>
       <div className="page-sub">Everything you&apos;ve done, clearly.</div>
 
       {intents.length === 0 ? (

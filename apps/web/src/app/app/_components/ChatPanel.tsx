@@ -23,9 +23,10 @@ interface Message {
 }
 
 const SUGGESTIONS = [
-  { icon: '↗', label: 'Send $300 to Kwame' },
-  { icon: '↑', label: 'Grow $500 at best rate' },
-  { icon: '⬡', label: 'Protect my savings from inflation' },
+  { icon: '↗', label: 'Send $300 to Kwame',                primitive: 'MOVE' },
+  { icon: '↑', label: 'Grow $500 at best rate',            primitive: 'GROW' },
+  { icon: '⬡', label: 'Protect my savings from inflation', primitive: 'PROTECT' },
+  { icon: '$', label: 'Convert 1 ETH to USDC',             primitive: 'CONVERT' },
 ];
 
 // ── ChatPanel ──────────────────────────────────────────────────────────────
@@ -186,8 +187,11 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
 
   return (
     <>
+      {/* Background grid overlay */}
+      <div className="chat-grid-overlay" aria-hidden="true" />
+
       {/* Messages */}
-      <div className="messages">
+      <div className="messages scrollbar-hide">
         {isEmpty ? (
           <EmptyState onSuggest={label => void sendMessage(label)} />
         ) : (
@@ -214,7 +218,7 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
                 className="suggest-chip"
                 onClick={() => void sendMessage(s.label)}
               >
-                <span style={{ fontSize: 13 }}>{s.icon}</span>
+                <span className="suggest-chip-primitive">{s.primitive}</span>
                 {s.label}
               </button>
             ))}
@@ -222,12 +226,17 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
         )}
 
         <div className="input-bar">
+          {/* intend:// prefix */}
+          <span className="input-prefix">
+            <span className="input-prefix-intend">intend</span>
+            <span className="input-prefix-sep">://</span>
+          </span>
           <textarea
             ref={inputRef}
             className="input-field"
             value={input}
             rows={1}
-            placeholder="What do you want to do with your money?"
+            placeholder="What would you like your money to do?"
             disabled={isStreaming || !userId}
             onChange={e => { setInput(e.target.value); autoResize(e.target); }}
             onKeyDown={handleKeyDown}
@@ -252,15 +261,12 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
 // ── Empty state ────────────────────────────────────────────────────────────
 
 function EmptyState({ onSuggest }: { onSuggest: (label: string) => void }) {
-  void onSuggest; // available for future use
+  void onSuggest;
   return (
-    <div className="empty-state">
-      <div className="empty-icon">◎</div>
-      <div className="empty-title">Your money is ready.</div>
-      <div className="empty-sub">
-        Tell Intend what you want to do — in plain language.
-        It handles the rest.
-      </div>
+    <div className="chat-empty">
+      <div className="chat-empty-logo">i</div>
+      <div className="chat-empty-heading">Intend Concierge</div>
+      <div className="chat-empty-tagline">Your money, executing your intentions.</div>
     </div>
   );
 }
@@ -282,6 +288,16 @@ function MessageRow({
 
   return (
     <div className={`msg ${isUser ? 'user' : 'system'}`}>
+      {/* Role label */}
+      <div className="msg-role-row">
+        <span className="tech-label msg-role-label">
+          {isUser ? 'REQUEST_TX' : 'INTEND_AGENT'}
+        </span>
+        <span className="msg-time">
+          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </div>
+
       <div
         className="msg-bubble"
         style={msg.status === 'error' ? { borderColor: 'var(--red)', color: 'var(--red)' } : undefined}
@@ -309,10 +325,6 @@ function MessageRow({
           <div className="success-sub">Your intent has been executed.</div>
         </div>
       )}
-
-      <span className="msg-time">
-        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </span>
     </div>
   );
 }

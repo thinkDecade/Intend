@@ -17,7 +17,10 @@ export default async function PositionsPage() {
 
   return (
     <div className="page">
-      <div className="page-title">Positions</div>
+      <p className="tech-label" style={{ color: 'var(--accent)', marginBottom: 10 }}>
+        INTELLIGENCE CONSOLE // POSITIONS_SURFACE
+      </p>
+      <div className="page-title font-heading">Positions</div>
       <div className="page-sub">Your active yield and investment positions.</div>
 
       {positions.length === 0 ? (
