@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { saveOnboardingProfile, completeOnboarding } from './actions';
+import { saveOnboardingProfile, completeOnboarding, provisionWallet } from './actions';
 
 /* ── motion ───────────────────────────────────────────────────────────── */
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -232,15 +232,45 @@ function StepAccount({
   profile: Profile;
   onNext: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
-  const accountId = email.replace('@', '_').replace(/\./g, '_');
+  const [copiedEmail,  setCopiedEmail]  = useState(false);
+  const [copiedWallet, setCopiedWallet] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletError,   setWalletError]   = useState<string | null>(null);
+  const [provisioning,  setProvisioning]  = useState(true);
+
+  // Provision wallet as soon as this step mounts
+  useEffect(() => {
+    let cancelled = false;
+    provisionWallet().then((result) => {
+      if (cancelled) return;
+      if ('address' in result) {
+        setWalletAddress(result.address);
+      } else {
+        setWalletError(result.error);
+      }
+      setProvisioning(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   function copyEmail() {
     navigator.clipboard.writeText(email).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2000);
     });
   }
+
+  function copyWallet() {
+    if (!walletAddress) return;
+    navigator.clipboard.writeText(walletAddress).then(() => {
+      setCopiedWallet(true);
+      setTimeout(() => setCopiedWallet(false), 2000);
+    });
+  }
+
+  const shortWallet = walletAddress
+    ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
+    : null;
 
   return (
     <div className="ob-step">
@@ -251,8 +281,8 @@ function StepAccount({
           : 'Your financial command center is ready.'}
       </h2>
       <p className="ob-sub">
-        Intend has set up your secure account. Your wallet is provisioned on
-        your first transaction — nothing sits idle, nothing is wasted.
+        Intend has set up your secure account and provisioned your wallet.
+        Your private keys are held in Coinbase&apos;s secure enclave — never on Intend&apos;s servers.
       </p>
 
       <div className="ob-account-card">
@@ -260,7 +290,7 @@ function StepAccount({
           <span className="ob-account-label">Account</span>
           <span className="ob-account-value">{email}</span>
           <button className="ob-copy-btn" onClick={copyEmail} title="Copy email">
-            {copied ? (
+            {copiedEmail ? (
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M2 7l3.5 3.5L12 3" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round"/>
               </svg>
@@ -284,9 +314,37 @@ function StepAccount({
         </div>
         <div className="ob-account-row ob-account-row--last">
           <span className="ob-account-label">Wallet</span>
-          <span className="ob-account-value ob-account-value--muted">
-            Provisioned on first transaction
-          </span>
+          {provisioning ? (
+            <span className="ob-account-value ob-account-value--muted" style={{ fontStyle: 'italic' }}>
+              Provisioning…
+            </span>
+          ) : walletAddress ? (
+            <>
+              <span
+                className="ob-account-value"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                title={walletAddress}
+              >
+                {shortWallet}
+              </span>
+              <button className="ob-copy-btn" onClick={copyWallet} title="Copy wallet address">
+                {copiedWallet ? (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 7l3.5 3.5L12 3" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round"/>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M2 10V2h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                )}
+              </button>
+            </>
+          ) : (
+            <span className="ob-account-value ob-account-value--muted" style={{ fontSize: 11 }}>
+              {walletError ?? 'Will be created on first use'}
+            </span>
+          )}
         </div>
       </div>
 

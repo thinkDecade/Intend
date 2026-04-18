@@ -10,3 +10,4 @@ export * from './repositories/positions.js';
 export * from './repositories/goals.js';
 export * from './repositories/reminders.js';
 export * from './repositories/claims.js';
+export * from './repositories/wallets.js';

@@ -4,8 +4,10 @@ import { cookies }     from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
 import {
   getUserById, getActiveGoals, getActivePositions, getPendingConfirmations,
-  createIntent, cacheSet, keys, TTL,
+  createIntent, cacheSet, cacheGet, keys, TTL,
+  getUserPrimaryWallet,
 } from '@intend/data';
+import type { Balance } from '@intend/core';
 import {
   buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch,
 } from '@intend/intelligence';
@@ -81,14 +83,18 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        const [positions, goals, pending] = await Promise.all([
+        const CHAIN = process.env['NODE_ENV'] === 'production' ? 'base' : 'base_sepolia';
+
+        const [positions, goals, pending, walletRow, cachedBalances] = await Promise.all([
           getActivePositions(userId).catch(() => []),
           getActiveGoals(userId).catch(() => []),
           getPendingConfirmations(userId).catch(() => []),
+          getUserPrimaryWallet(userId, CHAIN as 'base' | 'base_sepolia').catch(() => null),
+          cacheGet<Balance[]>(keys.userBalances(userId)).then(c => c?.data ?? []).catch(() => [] as Balance[]),
         ]);
 
         const ufm = await buildUFM(userId, {
-          balances: [],
+          balances: cachedBalances,
           activePositions: positions.map(p => ({
             id:           p.position_id,
             asset:        p.asset,
@@ -124,7 +130,12 @@ export async function POST(req: NextRequest) {
 
         // 3a. LOW confidence or conversational → respond with streaming chat
         if (!isHighConfidenceFinancial) {
-          const systemPrompt = buildConversationalSystemPrompt(ufm, dbUser.display_name);
+          const systemPrompt = buildConversationalSystemPrompt(
+            ufm,
+            dbUser.display_name,
+            walletRow?.address ?? null,
+            cachedBalances,
+          );
           const messages = [
             ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
             { role: 'user' as const, content: message },
@@ -228,11 +239,35 @@ export async function POST(req: NextRequest) {
 function buildConversationalSystemPrompt(
   ufm: Awaited<ReturnType<typeof buildUFM>>,
   displayName: string | null,
+  walletAddress: string | null,
+  balances: Balance[],
 ): string {
   const name = displayName ?? 'there';
+
+  // Wallet section — only shown when an address exists
+  const walletSection = walletAddress
+    ? `
+The user's wallet address is: ${walletAddress}
+When asked, share this address directly and completely — never truncate it.
+The wallet is on Base (a fast, low-cost Ethereum network), but NEVER mention the chain name to the user unless they specifically ask about technical details.`
+    : `
+The user does not have a wallet provisioned yet. If they ask about their wallet address or want to receive funds, tell them: "Your wallet will be created automatically the moment you make your first transaction — you don't need to do anything." Do not suggest they go somewhere or take manual steps.`;
+
+  // Balance section — only shown when there's something to show
+  const totalAvailable = balances.reduce((s, b) => s + b.usd_value, 0);
+  const balanceSection = balances.length > 0
+    ? `
+Current wallet balance: $${totalAvailable.toFixed(2)} USD equivalent
+Breakdown: ${balances.map(b => `${b.amount.toFixed(4)} ${b.asset} (~$${b.usd_value.toFixed(2)})`).join(', ')}
+When asked about their balance, give these specific numbers. If they ask whether they have enough for something, do the maths.`
+    : `
+The wallet currently shows no balance (empty or not yet loaded). If they ask about their balance, tell them it appears to be empty and they can add funds from the Fund section.`;
+
   return `You are Intend — a world-class personal financial concierge. You are warm, direct, and genuinely helpful. You speak like a trusted friend who happens to be a financial expert.
 
 The user's name is ${name}.
+${walletSection}
+${balanceSection}
 
 Your capabilities:
 - Protect money from inflation and currency risk
@@ -249,6 +284,7 @@ Important rules you never break:
 2. Never guarantee returns — use "historically", "typically", "expected to"
 3. Never give direct financial advice — present facts and options
 4. Never reveal technical implementation details
+5. When sharing a wallet address, always show the full address — never truncate
 
 Your voice:
 - Warm but not effusive. Confident. Direct.
