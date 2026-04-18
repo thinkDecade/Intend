@@ -180,22 +180,28 @@ export async function verifyOtp(formData: FormData) {
 
   if (error) return { error: error.message };
 
-  // Ensure internal users table row exists after first verification
+  // Ensure internal users table row exists, and determine destination
+  let destination = '/app';
   if (data.user?.email) {
     try {
       const existing = await getUserByEmail(data.user.email).catch(() => null);
-      if (!existing) {
+      if (existing) {
+        // Returning user — check if onboarding was completed
+        if (!existing.onboarding_completed) destination = '/onboard';
+      } else {
+        // Brand-new user — create record and send to onboarding
         await createUser({
           email:      data.user.email,
           webapp_uid: data.user.id,
         });
+        destination = '/onboard';
       }
     } catch (err) {
-      console.error('[verifyOtp] auto-create user failed:', err);
+      console.error('[verifyOtp] user record error:', err);
     }
   }
 
-  redirect('/app');
+  redirect(destination);
 }
 
 export async function signOut() {
