@@ -29,6 +29,7 @@ export const TTL = {
   SESSION:              3_600, // 1 hour (durable backup to Supabase)
   PROTECT_ALERT_COOLDOWN: 86_400, // 24 hours — don't re-alert same user same day
   PLAN_CACHE:              2_400, // 40 minutes — matches confirmation expiry window
+  BALANCES:                  120, // 2 minutes — wallet balance display cache
 } as const;
 
 // ── Max ages (2× TTL) — staleness limit before pipeline abort ─────────────
@@ -56,6 +57,8 @@ export const keys = {
    * TTL matches confirmation expiry window (40 minutes).
    */
   planCache: (intentId: string)                            => `intend:plan:${intentId}`,
+  /** 2-minute wallet balance cache for portfolio display. */
+  userBalances: (userId: string)                           => `intend:balances:${userId}`,
 } as const;
 
 // ── Typed cache helpers ───────────────────────────────────────────────────
