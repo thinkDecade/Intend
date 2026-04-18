@@ -134,7 +134,7 @@ export default function NavPanel({ theme, setTheme }: NavPanelProps) {
           <p className="app-nav-channel-label">Channel Integration</p>
           <div className="app-nav-channel-btns">
             <a
-              href="https://t.me/IntendFinanceBot"
+              href="https://t.me/intend_auto_bot"
               target="_blank"
               rel="noreferrer"
               className="app-nav-channel-btn app-nav-channel-btn--active"

@@ -507,7 +507,7 @@ function StepChannels({ onFinish }: { onFinish: () => void }) {
       <div className="ob-channel-grid">
         <a
           className="ob-channel-card"
-          href="https://t.me/IntendFinanceBot"
+          href="https://t.me/intend_auto_bot"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -518,7 +518,7 @@ function StepChannels({ onFinish }: { onFinish: () => void }) {
           </div>
           <div className="ob-channel-text">
             <span className="ob-channel-name">Telegram</span>
-            <span className="ob-channel-handle">@IntendFinanceBot</span>
+            <span className="ob-channel-handle">@intend_auto_bot</span>
           </div>
           <svg className="ob-channel-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

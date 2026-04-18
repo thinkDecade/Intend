@@ -32,12 +32,15 @@ const SUGGESTIONS = [
 // ── ChatPanel ──────────────────────────────────────────────────────────────
 
 export default function ChatPanel({ userId }: { userId: string | null }) {
-  const [messages, setMessages]     = useState<Message[]>([]);
-  const [input, setInput]           = useState('');
-  const [isStreaming, setStreaming] = useState(false);
+  const [messages, setMessages]       = useState<Message[]>([]);
+  const [input, setInput]             = useState('');
+  const [isStreaming, setStreaming]   = useState(false);
   const [confirmingId, setConfirming] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const bottomRef   = useRef<HTMLDivElement>(null);
+  const inputRef    = useRef<HTMLTextAreaElement>(null);
+  // Keep a stable ref to messages so sendMessage can read current history
+  const messagesRef = useRef<Message[]>([]);
+  messagesRef.current = messages;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -48,7 +51,6 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
     const pending = sessionStorage.getItem('intend:first_intent');
     if (pending) {
       sessionStorage.removeItem('intend:first_intent');
-      // Small delay to let the panel mount fully before sending
       const t = setTimeout(() => void sendMessage(pending), 600);
       return () => clearTimeout(t);
     }
@@ -66,10 +68,13 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
     if (!msg || isStreaming) return;
 
     setInput('');
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-    }
+    if (inputRef.current) inputRef.current.style.height = 'auto';
     setStreaming(true);
+
+    // Build history from current messages (exclude in-flight entries)
+    const history = messagesRef.current
+      .filter(m => m.status !== 'streaming' && m.status !== 'error' && m.content)
+      .map(m => ({ role: m.role, content: m.content }));
 
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: msg };
     const assistantId = crypto.randomUUID();
@@ -81,7 +86,7 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, userId }),
+        body: JSON.stringify({ message: msg, userId, history }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
