@@ -7,7 +7,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { getUserByEmail, createUser } from '@intend/data';
 
-// ── Supabase admin client (service role — bypasses RLS, generates OTP links) ──
+// ── Supabase admin client ─────────────────────────────────────────────────────
 function getAdminClient() {
   return createAdminClient(
     process.env['SUPABASE_URL']!,
@@ -15,49 +15,18 @@ function getAdminClient() {
   );
 }
 
-// ── Resend client ─────────────────────────────────────────────────────────────
-function getResend() {
-  return new Resend(process.env['RESEND_API_KEY']);
-}
-
-export async function signInWithOtp(formData: FormData) {
-  const email = formData.get('email') as string;
-  if (!email?.trim()) return { error: 'Email is required.' };
-
-  const siteUrl =
+// ── Site URL helper ───────────────────────────────────────────────────────────
+function getSiteUrl() {
+  return (
     process.env['NEXT_PUBLIC_SITE_URL'] ??
     (process.env['VERCEL_URL'] ? `https://${process.env['VERCEL_URL']}` : null) ??
-    'http://localhost:3002';
+    'http://localhost:3002'
+  );
+}
 
-  try {
-    // Generate OTP + magic link via admin API without sending Supabase's built-in email.
-    // This bypasses Supabase's rate-limited built-in mailer.
-    const adminClient = getAdminClient();
-    const { data, error: genError } = await adminClient.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: { redirectTo: `${siteUrl}/auth/callback?next=/app` },
-    });
-
-    if (genError || !data?.properties?.email_otp) {
-      // Fallback: try the standard OTP flow (may still hit rate limit on dev projects)
-      console.warn('[signInWithOtp] admin.generateLink failed:', genError?.message, '— falling back to signInWithOtp');
-      const cookieStore = await cookies();
-      const supabase = createClient(cookieStore);
-      const { error: fallbackErr } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback?next=/app` },
-      });
-      if (fallbackErr) return { error: fallbackErr.message };
-      return { success: true };
-    }
-
-    const otp      = data.properties.email_otp;   // 6-digit code
-    const magicLink = data.properties.action_link;
-
-    // Build HTML body (used whether we have OTP or just a magic link)
-    const emailHtml = `
-<!DOCTYPE html>
+// ── Branded email HTML ────────────────────────────────────────────────────────
+function buildEmailHtml(otp: string | null | undefined, magicLink: string | null | undefined) {
+  return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#F5F0E6;font-family:'Helvetica Neue',Arial,sans-serif;">
@@ -74,9 +43,9 @@ export async function signInWithOtp(formData: FormData) {
           <div style="background:#F5F0E6;border-radius:12px;padding:24px;text-align:center;margin-bottom:32px;">
             <p style="margin:0;font-size:42px;font-weight:800;color:#D4A24A;letter-spacing:0.2em;font-family:'Courier New',monospace;">${otp}</p>
           </div>
-          <p style="margin:0 0 16px;font-size:14px;color:#7D6F62;">Or sign in instantly with the link below:</p>
-          ` : `<p style="margin:0 0 16px;font-size:14px;color:#7D6F62;">Click the button below to sign in instantly:</p>`}
-          <a href="${magicLink}" style="display:inline-block;background:#1A1612;color:#F5F0E6;text-decoration:none;padding:14px 28px;border-radius:100px;font-size:14px;font-weight:600;">Open Intend &rarr;</a>
+          <p style="margin:0 0 16px;font-size:14px;color:#7D6F62;">Or click the button below to sign in instantly:</p>
+          ` : '<p style="margin:0 0 16px;font-size:14px;color:#7D6F62;">Click the button below to sign in instantly:</p>'}
+          ${magicLink ? `<a href="${magicLink}" style="display:inline-block;background:#1A1612;color:#F5F0E6;text-decoration:none;padding:14px 28px;border-radius:100px;font-size:14px;font-weight:600;">Open Intend &rarr;</a>` : ''}
         </td></tr>
         <tr><td style="padding:24px 40px;border-top:1px solid #E0DACD;">
           <p style="margin:0;font-size:12px;color:#A0907E;">If you didn't request this, ignore it — your account is safe.</p>
@@ -86,41 +55,96 @@ export async function signInWithOtp(formData: FormData) {
   </table>
 </body>
 </html>`;
+}
 
-    // Try Resend first (branded email)
-    try {
-      const resend = getResend();
+// ─────────────────────────────────────────────────────────────────────────────
+// signInWithOtp
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Two completely separate paths — they NEVER both run for the same request:
+//
+// PATH A (preferred): RESEND_API_KEY is set
+//   1. admin.generateLink → creates OTP in Supabase WITHOUT triggering Supabase email
+//   2. Send branded email via Resend
+//   3. Never touch signInWithOtp (avoids double-request rate limit error)
+//
+// PATH B (fallback): RESEND_API_KEY is not set
+//   1. signInWithOtp → Supabase sends its own email
+//   2. Never touch admin.generateLink
+//
+export async function signInWithOtp(formData: FormData) {
+  const email = formData.get('email') as string;
+  if (!email?.trim()) return { error: 'Email is required.' };
+
+  const siteUrl   = getSiteUrl();
+  const resendKey = process.env['RESEND_API_KEY'];
+
+  try {
+    // ── PATH A: Resend available ──────────────────────────────────────────
+    if (resendKey) {
+      const adminClient = getAdminClient();
+      const { data, error: genError } = await adminClient.auth.admin.generateLink({
+        type:    'magiclink',
+        email,
+        options: { redirectTo: `${siteUrl}/auth/callback?next=/app` },
+      });
+
+      if (genError) {
+        console.error('[signInWithOtp] PATH A: admin.generateLink failed:', genError.message);
+        return { error: 'Could not generate sign-in link. Please try again.' };
+      }
+
+      const otp       = data?.properties?.email_otp ?? null;
+      const magicLink = data?.properties?.action_link ?? null;
+
+      const resend = new Resend(resendKey);
       const { error: emailError } = await resend.emails.send({
         from:    'Intend <onboarding@resend.dev>',
         to:      email,
         subject: otp ? `${otp} — Your Intend sign-in code` : 'Your Intend sign-in link',
-        html:    emailHtml,
+        html:    buildEmailHtml(otp, magicLink),
       });
 
-      if (!emailError) return { success: true };
-      console.warn('[signInWithOtp] Resend delivery failed:', emailError, '— falling back to Supabase email');
-    } catch (resendErr) {
-      console.warn('[signInWithOtp] Resend threw:', resendErr, '— falling back to Supabase email');
+      if (emailError) {
+        console.error('[signInWithOtp] PATH A: Resend failed:', JSON.stringify(emailError));
+        // Specific Resend error to help debugging
+        const msg = (emailError as { message?: string }).message ?? String(emailError);
+        return { error: `Email delivery failed: ${msg}` };
+      }
+
+      return { success: true };
     }
 
-    // Resend failed — fall back to Supabase built-in mailer
-    const cookieStore2 = await cookies();
-    const supabase2    = createClient(cookieStore2);
-    const { error: fallbackErr } = await supabase2.auth.signInWithOtp({
+    // ── PATH B: No Resend key — use Supabase built-in email ──────────────
+    console.warn('[signInWithOtp] PATH B: RESEND_API_KEY not set, using Supabase email');
+    const cookieStore = await cookies();
+    const supabase    = createClient(cookieStore);
+    const { error: otpErr } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback?next=/app` },
     });
-    if (fallbackErr) {
-      console.error('[signInWithOtp] Supabase fallback also failed:', fallbackErr.message);
-      return { error: fallbackErr.message };
+
+    if (otpErr) {
+      console.error('[signInWithOtp] PATH B: signInWithOtp failed:', otpErr.message);
+      return { error: otpErr.message };
     }
+
     return { success: true };
+
   } catch (err) {
     console.error('[signInWithOtp] unexpected error:', err);
     return { error: 'Something went wrong. Please try again in a moment.' };
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// verifyOtp
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Tries both token types because the type depends on which path was used above:
+//   PATH A (admin.generateLink magiclink) → type: 'magiclink' or 'email'
+//   PATH B (signInWithOtp)               → type: 'email'
+//
 export async function verifyOtp(formData: FormData) {
   const email = formData.get('email') as string;
   const token = formData.get('token') as string;
@@ -128,15 +152,19 @@ export async function verifyOtp(formData: FormData) {
   const cookieStore = await cookies();
   const supabase    = createClient(cookieStore);
 
-  const { data, error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'email',
-  });
+  // Try email type first (PATH B and some PATH A configurations)
+  let { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+
+  // If email type fails, try magiclink type (PATH A with admin.generateLink)
+  if (error) {
+    const result = await supabase.auth.verifyOtp({ email, token, type: 'magiclink' });
+    data  = result.data;
+    error = result.error;
+  }
 
   if (error) return { error: error.message };
 
-  // Ensure internal users table row exists after first OTP verification
+  // Ensure internal users table row exists after first verification
   if (data.user?.email) {
     try {
       const existing = await getUserByEmail(data.user.email).catch(() => null);
