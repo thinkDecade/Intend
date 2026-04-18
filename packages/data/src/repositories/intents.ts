@@ -33,7 +33,7 @@ export async function createIntent(
       primitive:         intention.primitive,
       raw_input:         intention.raw_input,
       intention_object:  intention,
-      intent_confidence: intention.intent_confidence,
+      intent_confidence: intention.intent_confidence ?? 0,
       status:            'pending',
     })
     .select()
