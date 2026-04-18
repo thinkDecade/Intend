@@ -250,6 +250,30 @@ User speaks freely (any language, any phrasing)
 
 ---
 
+### Phase 8 — Onboarding, UI Redesign & Agent Intelligence ✅
+
+- [x] **Onboarding flow** — 6-step animated wizard at `/onboard` (welcome → profile → account → fund → first intent → channels)
+- [x] `supabase/migrations/003_onboarding_flag.sql` — `onboarding_completed BOOLEAN DEFAULT FALSE` on users table
+- [x] `supabase/migrations/004_reset_onboarding.sql` — reset all existing users to trigger new onboarding flow
+- [x] `packages/data/src/repositories/users.ts` — added `markOnboardingComplete(userId)` + `onboarding_completed` to `UserRow`
+- [x] `apps/web/src/app/onboard/` — page.tsx (server), onboard-flow.tsx (6-step client), actions.ts (saveOnboardingProfile, completeOnboarding)
+- [x] Auth routing: both `verifyOtp` (OTP path) and `ensureUserRecord` (magic link path) now route new/incomplete users to `/onboard`
+- [x] Middleware updated — authenticated users allowed at `/onboard`
+- [x] First intent pickup — `sessionStorage['intend:first_intent']` passed to ChatPanel, auto-fired on mount
+- [x] **Full WebApp UI redesign** — new design system matching reference UI (Outfit/Plus Jakarta Sans/JetBrains Mono, gold/parchment palette, dark mode, glass panels)
+- [x] AppShell rebuilt — theme persistence, mouse-edge RealityPanel trigger
+- [x] NavPanel rebuilt — "Take Intend with you" channel pills (Telegram active, WhatsApp soon), Settings + Profile footer row
+- [x] RealityPanel built — 2×2 macro grid, animated insight feed, purchasing power bar
+- [x] ChatPanel redesigned — gold empty state, REQUEST_TX/INTEND_AGENT labels, `intend://` prefix, action chips, sessionStorage persistence
+- [x] **Intelligent agent conversations** — `/api/chat` splits conversational vs financial at `intent_confidence >= 0.75`; conversational path uses `streamText` with full history; financial path unchanged
+- [x] Conversation history threading — client sends last 20 messages; `messagesRef` snapshots before optimistic UI update
+- [x] **Email auth fixed** — clean PATH A (Resend) / PATH B (Supabase) split; no double-request rate-limit error; `verifyOtp` tries both token types; `RESEND_FROM_EMAIL` env var for future domain
+- [x] Gmail SMTP configured in Supabase dashboard — bypasses Resend sandbox restriction
+- [x] Telegram bot link corrected to `@intend_auto_bot` in NavPanel and onboarding
+- [x] Update DOCUMENTATION.md
+
+---
+
 ## Deferred to Post-v0.5
 
 - SEND fiat rails (Flutterwave for NGN/GHS, Wise for GBP/CNY/other) — depends on funding

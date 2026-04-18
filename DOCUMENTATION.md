@@ -1,8 +1,7 @@
 # INTEND v0.5 — Technical Documentation
 
-> Last updated: 2026-04-17 (Phases 0–7 complete)
+> Last updated: 2026-04-18 (Phases 0–8 complete)
 > Status: v0.5 LIVE — https://intendfinance.netlify.app
-> Remaining: end-to-end smoke test (requires live deploy + GCP VM `git pull`)
 > Build Plan: `BUILD_PLAN.md` (source of truth for current build direction)
 
 ---
@@ -132,14 +131,15 @@ intend/
 │   │   ├── src/app/
 │   │   │   ├── page.tsx               Landing page
 │   │   │   ├── login/                 OTP auth flow
-│   │   │   ├── auth/callback/         Supabase auth exchange
+│   │   │   ├── auth/callback/         Supabase auth exchange + onboarding routing
+│   │   │   ├── onboard/               6-step onboarding (new/incomplete users)
 │   │   │   ├── app/                   Authenticated dashboard
 │   │   │   │   ├── page.tsx           Chat interface
 │   │   │   │   ├── goals/             SAVE goals view
 │   │   │   │   ├── positions/         GROW/INVEST positions
 │   │   │   │   ├── history/           Intent history
 │   │   │   │   ├── settings/          User preferences
-│   │   │   │   └── _components/       ChatPanel, NavPanel, TopBar, RightPanel, AppShell
+│   │   │   │   └── _components/       ChatPanel, NavPanel, RealityPanel, AppShell
 │   │   │   ├── api/
 │   │   │   │   ├── chat/              SSE streaming chat endpoint
 │   │   │   │   ├── confirm/           Intent confirmation
@@ -603,7 +603,8 @@ Premium dark-themed landing page. Client component using framer-motion for scrol
 |-------|------|------|---------|
 | `/` | Static | None | Premium landing page (framer-motion animations) |
 | `/login` | Static | None | OTP auth (email + 6-digit code) |
-| `/auth/callback` | Dynamic | None | Supabase auth exchange + user creation |
+| `/auth/callback` | Dynamic | None | Supabase auth exchange → routes new users to /onboard |
+| `/onboard` | Dynamic | JWT | 6-step onboarding wizard (new + incomplete users) |
 | `/app` | Dynamic | JWT | Main dashboard with chat interface |
 | `/app/goals` | Dynamic | JWT | SAVE goals with progress bars |
 | `/app/positions` | Dynamic | JWT | GROW/INVEST positions table |
@@ -624,17 +625,44 @@ Premium dark-themed landing page. Client component using framer-motion for scrol
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| **ChatPanel** | `_components/ChatPanel.tsx` | Full chat interface with streaming, plan preview cards, confirm/cancel |
-| **NavPanel** | `_components/NavPanel.tsx` | Left sidebar icon navigation |
-| **TopBar** | `_components/TopBar.tsx` | Header with greeting + initials |
-| **RightPanel** | `_components/RightPanel.tsx` | Context-aware sidebar (balances, stats) |
-| **AppShell** | `_components/AppShell.tsx` | Layout wrapper with collapsible panel |
+| **ChatPanel** | `_components/ChatPanel.tsx` | Streaming chat, plan preview cards, confirm/cancel, sessionStorage persistence, action chips |
+| **NavPanel** | `_components/NavPanel.tsx` | Left sidebar — logo, nav items, "Take Intend with you" channel pills, settings/profile footer |
+| **RealityPanel** | `_components/RealityPanel.tsx` | Right slide-in — 2×2 macro grid, insight feed, purchasing power bar |
+| **AppShell** | `_components/AppShell.tsx` | Layout wrapper — theme state, mouse-edge RealityPanel trigger |
+| **OnboardFlow** | `onboard/onboard-flow.tsx` | 6-step AnimatePresence wizard — profile, fund, first intent, channels |
+
+### Chat API (`/api/chat`) — Intelligent Routing
+
+The chat route splits incoming messages into two paths based on `intent_confidence`:
+
+- **Conversational path** (`confidence < 0.75`): Streams a natural response via `streamText()` with full conversation history injected. Uses `buildConversationalSystemPrompt()` — warm persona, no plan generation.
+- **Financial path** (`confidence >= 0.75`): Existing plan generation flow → `generatePlan()` → `streamConfirmationMessage()` → SSE plan event.
+
+Conversation history: client sends last 20 completed messages with each request. `ChatPanel` uses `messagesRef` to snapshot history before optimistic UI updates.
+
+Session persistence: messages saved to `sessionStorage['intend:chat_messages']` on every update, restored on mount. Survives client-side navigation.
+
+### Onboarding Flow (`/onboard`)
+
+Six steps, animated with `framer-motion` `AnimatePresence`:
+
+| Step | Content |
+|------|---------|
+| 1. Welcome | Brand intro, capability overview |
+| 2. Profile | Display name, local currency, execution mode |
+| 3. Account | Glass card showing email, mode, wallet note |
+| 4. Fund | Crypto / fiat deposit tabs |
+| 5. First Intent | Suggestion chips + free text → `sessionStorage['intend:first_intent']` |
+| 6. Channels | Telegram deeplink (`@intend_auto_bot`), WhatsApp coming soon |
+
+On completion: `completeOnboarding()` calls `markOnboardingComplete(userId)` then redirects to `/app`. ChatPanel picks up the stored first intent on mount and fires it automatically (600ms delay).
 
 ### Middleware
 
 `middleware.ts` runs on every request:
 - Refreshes Supabase session via `getUser()`
-- Redirects unauthenticated users from `/app/*` to `/login`
+- Redirects unauthenticated users from `/app/*` and `/onboard` to `/login`
+- Allows authenticated users at `/onboard` (required for onboarding completion)
 - Redirects authenticated users from `/login` and `/` to `/app`
 - Passes `next` param for post-login redirect
 
@@ -728,6 +756,15 @@ IDLE → CLARIFYING → CONFIRMING → EXECUTING → IDLE
 
 **PostgreSQL 16 via Supabase** — 14 tables, 9 custom enums, RLS on all tables.
 
+### Migrations
+
+| File | Description |
+|------|-------------|
+| `001_initial_schema.sql` | 14 tables, 9 enums, full RLS |
+| `002_execution_mode.sql` | Added `execution_mode` column to users |
+| `003_onboarding_flag.sql` | Added `onboarding_completed BOOLEAN DEFAULT FALSE` to users |
+| `004_reset_onboarding.sql` | Reset all existing users to `onboarding_completed = FALSE` for new flow |
+
 ### Tables
 
 | Table | Purpose | Key Constraints |
@@ -764,22 +801,34 @@ IDLE → CLARIFYING → CONFIRMING → EXECUTING → IDLE
 
 ```
 1. User enters email on /login
-2. signInWithOtp() → Supabase sends email with 6-digit code + magic link
-3a. User enters 6-digit code → verifyOtp() → session created → redirect /app
-3b. User clicks magic link → /auth/callback → exchangeCodeForSession → redirect /app
-4. On successful auth, ensureUserRecord() creates a row in `users` table if not exists
-5. Middleware refreshes session on every request
+2. signInWithOtp() — two paths (never both run for same request):
+   PATH A (RESEND_API_KEY set):
+     a. admin.generateLink('magiclink') → generates OTP without Supabase email send
+     b. Resend API delivers branded email
+     c. If Resend fails (sandbox/domain) → fall back to Supabase signInWithOtp
+   PATH B (no RESEND_API_KEY):
+     a. supabase.auth.signInWithOtp() → Supabase SMTP delivers email
+3a. User enters 6-digit code → verifyOtp() → tries type:'email' then type:'magiclink'
+    → ensureUserRecord() → new user: redirect /onboard | returning: redirect /app
+3b. User clicks magic link → /auth/callback → exchangeCodeForSession
+    → ensureUserRecord() → new user: redirect /onboard | returning: redirect /app
+4. Middleware refreshes session on every request
 ```
 
-### User Auto-Creation (3 fallback points)
+### Onboarding Routing
 
-1. **Auth callback** (`/auth/callback/route.ts`) — creates after magic link click
-2. **verifyOtp action** (`/login/actions.ts`) — creates after 6-digit code entry
-3. **App layout** (`/app/layout.tsx`) — fallback for users with auth but no DB row
+`ensureUserRecord()` in `/auth/callback/route.ts` and `verifyOtp()` in `login/actions.ts` both check `onboarding_completed`:
+- **New user** (no DB row) → `createUser()` → `/onboard`
+- **Returning user, incomplete** (`onboarding_completed = false`) → `/onboard`
+- **Returning user, complete** → `/app` (or `next` param)
 
-### Email Template
+### Email Delivery
 
-Custom branded email via Resend SMTP: dark background (#1A1612), amber OTP code (#D4A24A), Georgia italic "intend" wordmark. Template at `supabase/templates/magic_link.html`.
+**Current configuration:** Supabase custom SMTP → Gmail (`smtp.gmail.com:587`, username: `thinkdecade@gmail.com`). 500 emails/day. No domain required.
+
+**Future (when domain verified):** Add `RESEND_FROM_EMAIL=Intend <hello@yourdomain.com>` to Netlify env vars → Resend branded email activates automatically via PATH A.
+
+**Email content:** Inline HTML template in `login/actions.ts` — gold `#D4A24A` OTP code, `#1A1612` background, magic link button. OTP display conditional on whether `admin.generateLink` returned `email_otp`.
 
 ---
 
@@ -787,29 +836,43 @@ Custom branded email via Resend SMTP: dark background (#1A1612), amber OTP code 
 
 ### Color Palette
 
-| Name | Hex | Usage |
-|------|-----|-------|
-| Cinder | `#1A1612` | Primary dark background |
-| Ember | `#252019` | Card/panel backgrounds |
-| Bark | `#302A23` | Tertiary/nav backgrounds |
-| Parchment | `#F5F0E6` | Primary text |
-| Clay | `#A0907E` | Secondary/muted text |
-| Stone | `#7D6F62` | Tertiary text |
-| Amber | `#D4A24A` | Brand accent (buttons, highlights) |
-| Harvest | `#E0B35C` | Accent hover state |
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `--cinder` | `#1A1612` | Primary dark background |
+| `--ember` | `#252019` | Card/panel backgrounds |
+| `--bark` | `#302A23` | Tertiary/nav backgrounds |
+| `--parchment` | `#F5F0E6` | Primary light background |
+| `--text` | `#1A1612` (light) / `#F5F0E6` (dark) | Primary text |
+| `--text2` | `#4A3F35` / `#C8B9A8` | Secondary text |
+| `--text3` | `#7D6F62` | Muted text |
+| `--accent` | `#D4A24A` | Brand gold (buttons, highlights) |
+| `--accent-ink` | `#1A1612` | Text on gold backgrounds |
+| `--red` | `#e53e3e` | Error states |
 
 ### Typography
 
-- **Display/Logo:** Georgia, serif (italic, letter-spacing: 0.2em)
-- **Product UI:** system-ui, -apple-system, sans-serif
-- **Code/Numbers:** 'Geist Mono', 'Courier New', monospace
+- **Display/Headings:** `Outfit` (300–800 weight) — `var(--font-display)`
+- **Body/UI:** `Plus Jakarta Sans` (300–700, with italic) — `var(--font-body)`
+- **Code/Mono:** `JetBrains Mono` (100–800) — `var(--font-mono)`
+
+Fonts loaded via `apps/web/src/app/fonts.ts` as Next.js `next/font/google` variables.
+
+### Design System
+
+- All CSS in `apps/web/src/app/globals.css`
+- CSS custom properties on `:root` and `html.dark` for theme switching
+- Theme toggle persists to `localStorage['intend-theme']`; `html.dark` class set on `<html>` before first paint (no flash)
+- Semantic aliases: `--glass-bg`, `--glass-border`, `--accent-tint`, `--stroke-0`, `--stroke-1`
+- Utility classes: `.tech-label` (mono uppercase), `.font-heading`, `.scrollbar-hide`
+- CSS namespace prefixes: `lp-` (landing), `ob-` (onboarding), `app-shell-*`, `app-nav-*`
 
 ### Design Principles
 
-- Bold, vibrant, classy with a touch of warmth
-- No oversaturation — amber used sparingly as accent
-- Dark-on-amber for primary buttons (Cinder text on Amber background)
-- Warm ambient glow (subtle radial gradient)
+- Outcome over instrument — warm, direct, never technical
+- Gold used sparingly as the single accent
+- Dark-on-amber for primary actions; never amber-on-dark
+- Glass morphism for panels (`backdrop-filter: blur`)
+- Confirmation cards use bordered glass, not filled backgrounds
 
 ---
 
@@ -870,6 +933,8 @@ Custom branded email via Resend SMTP: dark background (#1A1612), amber OTP code 
 | `OPENROUTER_API_KEY` | Fallback LLMs (free tier) | Yes |
 | `UPSTASH_REDIS_REST_URL` | Redis cache | Yes |
 | `UPSTASH_REDIS_REST_TOKEN` | Redis auth | Yes |
+| `RESEND_API_KEY` | Resend email API (PATH A delivery) | Yes |
+| `RESEND_FROM_EMAIL` | From address when domain verified (e.g. `Intend <hello@domain.com>`) | Optional |
 
 ### Required for Bot (GCP)
 
@@ -907,38 +972,39 @@ All of the above plus:
 
 ## 21. Known Gaps & Post-v0.5
 
-### Working Now (Phases 0–7 complete)
+### Working Now (Phases 0–8 complete)
 
+**Phases 0–7 (previously documented):**
 - 4 active primitives: PROTECT, CONVERT, SEND, SPEND
 - 4 gated primitives: GROW, SAVE, EARN, INVEST (friendly "coming in next version" message)
 - Two execution modes: Autonomous + Semi-Autonomous, switchable via settings and conversation
-- PROTECT hardcoded semi-autonomous (invariant)
 - PROTECT proactive monitor: hedge score threshold, 6h poll, 24h cooldown, FX/inflation alert
-- `forward_signal` in UFM — economic trajectory context
-- Mode-switch detection: regex pre-filter before LLM (zero latency)
-- Open reasoning context interpreter + assumptions layer
-- Live `hedge_score` in UFM (was placeholder 0)
-- Web confirm route now dispatches (Plan cached in Redis 40min, dynamic import of execution layer)
-- `balance_snapshot` populated before dispatch (Telegram + Web)
-- Conflict resolver: `checkConflict()`, `assertNoConflict()`, `PlanConflictError`
-- `checkProtocolHealth()`: live DefiLlama TVL check, ≥$10M + 30% drop guard
-- 3 channels: Web (live), Telegram (live), WhatsApp (skeleton)
-- OTP auth + branded emails
-- Streaming chat with plan preview
-- Settings persistence (execution mode toggle)
-- **Phase 6:** Deployed to Netlify — 17 env vars set, build clean, live at https://intendfinance.netlify.app
-- **Phase 7:** Landing page updated — 4 primitives, execution modes section, PROTECT showcase, WhatsApp "· soon"
+- Live hedge_score, forward_signal, open reasoning context interpreter
+- Web confirm route dispatches via Redis plan cache + dynamic AgentKit import
+- Conflict resolver, protocol health check (DefiLlama TVL)
+- Deployed to Netlify — live at https://intendfinance.netlify.app
 
-### Remaining (Post-v0.5)
+**Phase 8 (current):**
+- **Onboarding flow** — 6-step animated wizard (`/onboard`) for all new users; `onboarding_completed` DB flag gates routing; both OTP and magic-link paths route correctly to `/onboard`
+- **Intelligent agent conversations** — `/api/chat` splits conversational vs financial intents at `confidence >= 0.75`; low-confidence messages stream natural responses via `streamText` with full conversation history
+- **Chat persistence** — conversation saved to `sessionStorage`; survives client-side navigation; Clear button to reset
+- **Full UI redesign** — new design system: Outfit/Plus Jakarta Sans/JetBrains Mono fonts; gold/parchment/cinder palette; dark mode toggle; glassmorphism panels
+- **NavPanel redesign** — "Take Intend with you" section with Telegram/WhatsApp pills; Settings + Profile footer row
+- **RealityPanel** — right slide-in with 2×2 macro grid (inflation, hedge score, real yield, FX trend) + insight feed
+- **Action chips** — [Add funds] [Pay] [Transfer] [Clear] above input when conversation is active
+- **Email auth fixed** — two-path system (Resend PATH A / Supabase PATH B) with no double-request rate-limit errors; Gmail SMTP configured in Supabase as fallback; `verifyOtp` tries both token types
+- **First intent pickup** — onboarding stores intent in `sessionStorage['intend:first_intent']`; ChatPanel fires it automatically on mount
+
+### Remaining
 
 | Item | Notes |
 |------|-------|
-| End-to-end smoke test | Both Telegram + Web channels, both modes, all 4 primitives — requires live deploy + GCP VM update |
-| GCP VM update | `git pull origin v0.5` + `pm2 restart all` to activate proactive monitor on server |
-| OpenClaw gateway wiring | WORKSPACE.md updated; HTTP gateway requires VM SSH access (`openclaw doctor --fix`) |
+| GCP VM update | `git pull origin main` + `pm2 restart all` to pick up any bot changes |
 | On-chain balance display | `/api/portfolio` returns 0 for wallet balance |
-| History page filtering | No date range or primitive filter UI |
+| History page filtering | No date range or primitive filter UI yet |
 | Cross-channel handoff | Redis → Supabase sync exists but untested end-to-end |
+| Custom email domain | Add domain to Resend → set `RESEND_FROM_EMAIL` in Netlify → branded emails activate |
+| `/app/profile` route | Referenced in NavPanel footer but page not yet built |
 
 ### Post-v0.5 (Explicitly Deferred)
 
