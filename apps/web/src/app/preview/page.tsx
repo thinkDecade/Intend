@@ -19,7 +19,7 @@ export default function PreviewPage() {
       <div className="app-shell-outer">
         <NavPanel theme={theme} setTheme={setTheme} />
         <main className="app-shell-main">
-          <ChatPanel userId={null} />
+          <ChatPanel userId={null} isOnboarding={false} />
         </main>
       </div>
     </>

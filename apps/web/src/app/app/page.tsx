@@ -9,6 +9,7 @@ export default async function AppPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   let userId: string | null = null;
+  let isOnboarding = false;
   if (user?.email) {
     let dbUser = await getUserByEmail(user.email).catch(() => null);
     // Auto-create if layout didn't catch it
@@ -17,8 +18,9 @@ export default async function AppPage() {
         dbUser = await createUser({ email: user.email, webapp_uid: user.id });
       } catch { /* layout will retry */ }
     }
-    userId = dbUser?.user_id ?? null;
+    userId      = dbUser?.user_id ?? null;
+    isOnboarding = dbUser ? !dbUser.onboarding_completed : false;
   }
 
-  return <ChatPanel userId={userId} />;
+  return <ChatPanel userId={userId} isOnboarding={isOnboarding} />;
 }

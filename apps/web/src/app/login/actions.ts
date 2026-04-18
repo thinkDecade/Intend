@@ -86,7 +86,7 @@ export async function signInWithOtp(formData: FormData) {
       const { data, error: genError } = await adminClient.auth.admin.generateLink({
         type:    'magiclink',
         email,
-        options: { redirectTo: `${siteUrl}/auth/callback?next=/app` },
+        options: { redirectTo: `${siteUrl}/auth/callback` },
       });
 
       if (genError) {
@@ -120,7 +120,7 @@ export async function signInWithOtp(formData: FormData) {
       const supabaseFallback    = createClient(cookieStoreFallback);
       const { error: fallbackErr } = await supabaseFallback.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback?next=/app` },
+        options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback` },
       });
 
       if (fallbackErr) {
@@ -137,7 +137,7 @@ export async function signInWithOtp(formData: FormData) {
     const supabase    = createClient(cookieStore);
     const { error: otpErr } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback?next=/app` },
+      options: { shouldCreateUser: true, emailRedirectTo: `${siteUrl}/auth/callback` },
     });
 
     if (otpErr) {
@@ -180,28 +180,23 @@ export async function verifyOtp(formData: FormData) {
 
   if (error) return { error: error.message };
 
-  // Ensure internal users table row exists, and determine destination
-  let destination = '/app';
+  // Ensure internal users table row exists.
+  // Onboarding now happens conversationally in the chat — all users go to /app.
   if (data.user?.email) {
     try {
       const existing = await getUserByEmail(data.user.email).catch(() => null);
-      if (existing) {
-        // Returning user — check if onboarding was completed
-        if (!existing.onboarding_completed) destination = '/onboard';
-      } else {
-        // Brand-new user — create record and send to onboarding
+      if (!existing) {
         await createUser({
           email:      data.user.email,
           webapp_uid: data.user.id,
         });
-        destination = '/onboard';
       }
     } catch (err) {
       console.error('[verifyOtp] user record error:', err);
     }
   }
 
-  redirect(destination);
+  redirect('/app');
 }
 
 export async function signOut() {

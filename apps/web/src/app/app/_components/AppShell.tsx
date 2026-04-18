@@ -8,21 +8,25 @@ import RealityPanel from './RightPanel';
 export default function AppShell({
   children,
   userId,
+  displayName,
+  isOnboarding,
 }: {
-  children: React.ReactNode;
-  userId:   string | null;
+  children:     React.ReactNode;
+  userId:       string | null;
+  displayName:  string | null;
+  isOnboarding: boolean;
 }) {
-  const [showReality, setShowReality] = useState(false);
+  // New users see the reality panel immediately so they know it exists
+  const [showReality, setShowReality] = useState(isOnboarding);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
-  // Initialise theme from localStorage / prefers-color-scheme
+  // Initialise theme from localStorage — light is the default for everyone
   useEffect(() => {
     const saved = localStorage.getItem('intend-theme');
     if (saved === 'light' || saved === 'dark') {
       setTheme(saved);
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setTheme('dark');
     }
+    // No prefers-color-scheme fallback — Intend is light-first
   }, []);
 
   // Apply theme class to <html>
@@ -65,7 +69,7 @@ export default function AppShell({
             transition={{ type: 'spring', damping: 30, stiffness: 200 }}
             className="app-shell-right"
           >
-            <RealityPanel userId={userId} open={true} onDismiss={() => setShowReality(false)} />
+            <RealityPanel userId={userId} displayName={displayName} open={true} onDismiss={() => setShowReality(false)} />
           </motion.div>
         )}
       </AnimatePresence>

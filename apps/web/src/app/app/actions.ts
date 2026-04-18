@@ -87,6 +87,38 @@ export async function updateLimits(formData: FormData) {
   return { success: true };
 }
 
+/**
+ * Called by ChatPanel when the onboarding conversation has collected
+ * enough profile info. Saves extracted fields + marks onboarding done.
+ */
+export async function completeOnboardingFromChat(fields: {
+  display_name?:   string | null;
+  local_currency?: string;
+  execution_mode?: 'autonomous' | 'semi_autonomous';
+}) {
+  const dbUser = await getAuthedUser();
+  if (!dbUser) return { error: 'Not authenticated' };
+
+  const patch: Parameters<typeof updateUserSettings>[1] = {};
+  if (fields.display_name !== undefined)  patch.display_name   = fields.display_name;
+  if (fields.local_currency)              patch.local_currency = fields.local_currency;
+  if (fields.execution_mode)              patch.execution_mode = fields.execution_mode;
+
+  if (Object.keys(patch).length > 0) {
+    await updateUserSettings(dbUser.user_id, patch);
+  }
+
+  // Mark onboarding complete
+  const { getSupabase } = await import('@intend/data');
+  await getSupabase()
+    .from('users')
+    .update({ onboarding_completed: true })
+    .eq('user_id', dbUser.user_id);
+
+  revalidatePath('/app');
+  return { success: true };
+}
+
 export async function updatePreferredChannel(formData: FormData) {
   const dbUser = await getAuthedUser();
   if (!dbUser) return { error: 'Not authenticated' };

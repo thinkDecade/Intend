@@ -12,7 +12,7 @@ export async function middleware(request: NextRequest) {
   const isAppRoute     = path.startsWith('/app');
   const isOnboardRoute = path.startsWith('/onboard');
   const isLoginRoute   = path.startsWith('/login');
-  const isAuthRoute    = path.startsWith('/auth'); // /auth/callback — always allow
+  const isAuthRoute    = path.startsWith('/auth'); // /auth/callback, /auth/exchange — always allow
   const isLanding      = path === '/';
 
   // Let /auth/* through unconditionally

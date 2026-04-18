@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useTransition } from 'react';
+import { completeOnboardingFromChat } from '../actions';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -23,13 +24,14 @@ interface Message {
 }
 
 const SUGGESTIONS = [
-  { label: 'Send $300 to Kwame',                primitive: 'MOVE' },
-  { label: 'Grow $500 at best rate',            primitive: 'GROW' },
+  { label: 'Store my money safely',             primitive: 'STORE'   },
   { label: 'Protect my savings from inflation', primitive: 'PROTECT' },
-  { label: 'Convert 1 ETH to USDC',             primitive: 'CONVERT' },
+  { label: 'Grow $500 at best rate',            primitive: 'GROW'    },
+  { label: 'Send $300 to Kwame',                primitive: 'MOVE'    },
 ];
 
 const ACTION_CHIPS = [
+  { label: 'Store',      message: 'I want to store my funds with Intend' },
   { label: 'Add funds',  message: 'I want to add funds to my account' },
   { label: 'Pay',        message: 'I want to make a payment' },
   { label: 'Transfer',   message: 'I want to transfer money' },
@@ -39,7 +41,7 @@ const STORAGE_KEY = 'intend:chat_messages';
 
 // ── ChatPanel ──────────────────────────────────────────────────────────────
 
-export default function ChatPanel({ userId }: { userId: string | null }) {
+export default function ChatPanel({ userId, isOnboarding }: { userId: string | null; isOnboarding: boolean }) {
   const [messages, setMessages]       = useState<Message[]>(() => {
     // Restore conversation from sessionStorage on mount
     if (typeof window === 'undefined') return [];
@@ -51,6 +53,8 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
   const [input, setInput]             = useState('');
   const [isStreaming, setStreaming]   = useState(false);
   const [confirmingId, setConfirming] = useState<string | null>(null);
+  const [, startTransition]           = useTransition();
+  const onboardingFiredRef            = useRef(false);
   const bottomRef   = useRef<HTMLDivElement>(null);
   const inputRef    = useRef<HTMLTextAreaElement>(null);
   // Keep a stable ref to messages so sendMessage can read current history
@@ -70,10 +74,16 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Pick up intent pre-filled during onboarding
+  // Onboarding: fire greeting from agent on first load
   useEffect(() => {
+    if (isOnboarding && !onboardingFiredRef.current && messages.length === 0) {
+      onboardingFiredRef.current = true;
+      const t = setTimeout(() => void sendMessage('__onboarding_start__'), 400);
+      return () => clearTimeout(t);
+    }
+    // Legacy: pick up first_intent set during old onboarding wizard
     const pending = sessionStorage.getItem('intend:first_intent');
-    if (pending) {
+    if (pending && !isOnboarding) {
       sessionStorage.removeItem('intend:first_intent');
       const t = setTimeout(() => void sendMessage(pending), 600);
       return () => clearTimeout(t);
@@ -100,17 +110,24 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
       .filter(m => m.status !== 'streaming' && m.status !== 'error' && m.content)
       .map(m => ({ role: m.role, content: m.content }));
 
+    // The __onboarding_start__ trigger is invisible — don't show it as a user message
+    const isHiddenTrigger = msg === '__onboarding_start__';
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: msg };
     const assistantId = crypto.randomUUID();
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', status: 'streaming' };
 
-    setMessages(prev => [...prev, userMsg, assistantMsg]);
+    if (isHiddenTrigger) {
+      setMessages(prev => [...prev, assistantMsg]);
+    } else {
+      setMessages(prev => [...prev, userMsg, assistantMsg]);
+    }
 
     try {
+      const actualMessage = isHiddenTrigger ? 'Hello!' : msg;
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, userId, history }),
+        body: JSON.stringify({ message: actualMessage, userId, history, isOnboarding }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -138,17 +155,22 @@ export default function ChatPanel({ userId }: { userId: string | null }) {
           if (event.type === 'text' && event.content) {
             setMessages(prev => prev.map(m =>
               m.id === assistantId
-                ? { ...m, content: m.content + event.content! }
+                ? { ...m, content: m.content + (event.content as string) }
                 : m
             ));
           } else if (event.type === 'plan' && event.plan) {
             setMessages(prev => prev.map(m =>
-              m.id === assistantId ? { ...m, plan: event.plan!, status: 'done' } : m
+              m.id === assistantId ? { ...m, plan: event.plan as PlanMeta, status: 'done' } : m
             ));
+          } else if (event.type === 'onboarding_complete') {
+            // Server has saved profile + marked onboarding done. Reload to get fresh layout.
+            startTransition(() => {
+              window.location.reload();
+            });
           } else if (event.type === 'error') {
             setMessages(prev => prev.map(m =>
               m.id === assistantId
-                ? { ...m, content: event.error ?? 'Something went wrong.', status: 'error' }
+                ? { ...m, content: (event as { error?: string }).error ?? 'Something went wrong.', status: 'error' }
                 : m
             ));
           }

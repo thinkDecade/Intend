@@ -104,12 +104,14 @@ function XIcon({ size = 14 }: { size?: number }) {
 
 export default function RightPanel({
   userId,
+  displayName,
   open,
   onDismiss,
 }: {
-  userId:     string | null;
-  open:       boolean;
-  onDismiss?: () => void;
+  userId:       string | null;
+  displayName?: string | null;
+  open:         boolean;
+  onDismiss?:   () => void;
 }) {
   const [insights, setInsights]       = useState<InsightItem[]>([]);
   const [inflationRate, setInflation] = useState(3.42);
@@ -182,7 +184,9 @@ export default function RightPanel({
       <div className="reality-header">
         <div className="reality-header-left">
           <GlobeIcon />
-          <span className="reality-title">Economic Reality</span>
+          <span className="reality-title">
+            {displayName ? `${displayName}'s economic reality` : 'Your economic reality'}
+          </span>
         </div>
         {onDismiss && (
           <button className="reality-dismiss" onClick={onDismiss} aria-label="Dismiss">

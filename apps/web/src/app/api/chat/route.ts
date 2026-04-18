@@ -11,9 +11,11 @@ import type { Balance } from '@intend/core';
 import {
   buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch,
 } from '@intend/intelligence';
-import { updateUserSettings, logEvent } from '@intend/data';
+import { updateUserSettings, logEvent, markOnboardingComplete } from '@intend/data';
 import { generatePlan } from '@intend/decision';
 import { getModel } from '@intend/intelligence';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 
 const isEvmAddress = (v: string): boolean => /^0x[0-9a-fA-F]{40}$/.test(v);
 
@@ -39,16 +41,18 @@ export async function POST(req: NextRequest) {
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json() as {
-    message?: string;
-    userId?:  string;
-    history?: HistoryMessage[];
+    message?:      string;
+    userId?:       string;
+    history?:      HistoryMessage[];
+    isOnboarding?: boolean;
   };
 
-  const message = body.message?.trim();
+  const message      = body.message?.trim();
   if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 });
 
-  const userId  = body.userId ?? '';
-  const history = (body.history ?? []).slice(-20); // cap at last 20 messages
+  const userId       = body.userId ?? '';
+  const history      = (body.history ?? []).slice(-20);
+  const isOnboarding = body.isOnboarding ?? false;
 
   // ── Mode-switch detection (pre-LLM, regex only) ──────────────────────────
   const newMode = detectModeSwitch(message);
@@ -128,38 +132,83 @@ export async function POST(req: NextRequest) {
         const isHighConfidenceFinancial =
           intention.intent_confidence >= 0.75 && !needs_clarification;
 
-        // 3a. LOW confidence or conversational → respond with streaming chat
-        if (!isHighConfidenceFinancial) {
-          const systemPrompt = buildConversationalSystemPrompt(
-            ufm,
-            dbUser.display_name,
-            walletRow?.address ?? null,
-            cachedBalances,
-          );
-          const messages = [
+        // 3a. LOW confidence / conversational / onboarding → streaming chat
+        if (!isHighConfidenceFinancial || isOnboarding) {
+          const allMessages = [
             ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
             { role: 'user' as const, content: message },
           ];
 
+          const systemPrompt = isOnboarding
+            ? buildOnboardingSystemPrompt(dbUser.display_name)
+            : buildConversationalSystemPrompt(ufm, dbUser.display_name, walletRow?.address ?? null, cachedBalances);
+
           // If there's a clarification question AND it makes sense for a financial intent, use it
-          // Otherwise respond conversationally
-          if (needs_clarification && clarification_question && intention.intent_confidence > 0.4) {
+          if (!isOnboarding && needs_clarification && clarification_question && intention.intent_confidence > 0.4) {
             send({ type: 'text', content: clarification_question });
             send({ type: 'done' });
             controller.close();
             return;
           }
 
-          // Pure conversation — stream a natural response with full history
+          // Stream response
           const { textStream } = streamText({
-            model: getModel('primary'),
-            system: systemPrompt,
-            messages,
+            model:    getModel('primary'),
+            system:   systemPrompt,
+            messages: allMessages,
           });
 
           for await (const chunk of textStream) {
             send({ type: 'text', content: chunk });
           }
+
+          // Onboarding extraction — after 2+ user messages, try to extract profile data
+          if (isOnboarding) {
+            const userTurns = allMessages.filter(m => m.role === 'user').length;
+            if (userTurns >= 2) {
+              try {
+                const transcript = allMessages
+                  .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+                  .join('\n');
+
+                const { object: profile } = await generateObject({
+                  model: getModel('primary'),
+                  schema: z.object({
+                    display_name:     z.string().nullable().describe('The user\'s first name or preferred name, null if not yet given'),
+                    local_currency:   z.string().nullable().describe('3-letter ISO currency code inferred from what the user said, null if unclear'),
+                    execution_mode:   z.enum(['autonomous', 'semi_autonomous']).nullable().describe('autonomous if user wants Intend to act without asking, semi_autonomous if they want to confirm first, null if not yet clear'),
+                    profile_complete: z.boolean().describe('true only when display_name AND local_currency are both known'),
+                  }),
+                  prompt: `Extract the user's setup preferences from this onboarding conversation:\n\n${transcript}\n\nReturn null for any field that hasn't been clearly stated.`,
+                });
+
+                if (profile.display_name || profile.local_currency || profile.execution_mode) {
+                  send({ type: 'onboarding_data', profile });
+                }
+
+                if (profile.profile_complete && profile.display_name && profile.local_currency) {
+                  // Save and mark complete on the server
+                  await updateUserSettings(userId, {
+                    display_name:   profile.display_name,
+                    local_currency: profile.local_currency,
+                    ...(profile.execution_mode ? { execution_mode: profile.execution_mode } : {}),
+                  });
+                  await markOnboardingComplete(userId);
+
+                  // Provision wallet (non-fatal)
+                  try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const execution = await import('@intend/execution' as any);
+                    const NETWORK = process.env['NODE_ENV'] === 'production' ? 'base' : 'base-sepolia';
+                    await (execution as { getOrCreateWallet: (id: string, net: string) => Promise<unknown> }).getOrCreateWallet(userId, NETWORK);
+                  } catch { /* non-fatal */ }
+
+                  send({ type: 'onboarding_complete' });
+                }
+              } catch { /* extraction is non-fatal */ }
+            }
+          }
+
           send({ type: 'done' });
           controller.close();
           return;
@@ -234,6 +283,29 @@ export async function POST(req: NextRequest) {
   });
 }
 
+// ── Onboarding system prompt ───────────────────────────────────────────────
+
+function buildOnboardingSystemPrompt(existingName: string | null): string {
+  const hasName = !!existingName?.trim();
+  return `You are Intend — a warm, intelligent personal financial concierge having your first conversation with a new user.
+
+Your goal in this conversation is to learn three things, naturally:
+1. What to call them (their first name or preferred name)
+2. Their primary day-to-day currency (e.g. US dollars, Ghanaian cedis, British pounds)
+3. How they want Intend to act: should Intend always show a plan and wait for confirmation ("guided"), or just act within limits and report back ("autonomous")?
+
+Rules for this conversation:
+- Be warm, brief, and conversational — no long paragraphs
+- Ask one question at a time
+- Don't use bullet points or numbered lists
+- Don't explain DeFi, blockchain, or protocols
+- Don't mention wallets or technical setup — just focus on them
+- When you have their name and currency, you can confirm everything in one sentence and say you're ready
+- ${hasName ? `Their name is already set to "${existingName}" — you can use it and skip asking for name, but still ask about currency and mode.` : 'Start by warmly greeting them and asking their name.'}
+
+Keep each message under 3 sentences. Be human.`;
+}
+
 // ── Conversational system prompt ───────────────────────────────────────────
 
 function buildConversationalSystemPrompt(
@@ -270,6 +342,7 @@ ${walletSection}
 ${balanceSection}
 
 Your capabilities:
+- Store funds safely on the user's behalf — Intend holds assets and acts on them when the user intends something (this is the default state for deposited funds)
 - Protect money from inflation and currency risk
 - Grow idle capital (yield generation)
 - Move money to anyone, anywhere

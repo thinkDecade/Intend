@@ -29,12 +29,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
-  const userId = dbUser?.user_id ?? null;
+  const userId      = dbUser?.user_id ?? null;
+  const displayName = dbUser?.display_name ?? null;
+  const isOnboarding = dbUser ? !dbUser.onboarding_completed : false;
 
   return (
     <>
       <div className="ambient" />
-      <AppShell userId={userId}>
+      <AppShell userId={userId} displayName={displayName} isOnboarding={isOnboarding}>
         {children}
       </AppShell>
     </>
