@@ -638,7 +638,7 @@ export default function LandingPage() {
         <div className="lpr-shift-grain" aria-hidden="true"/>
         <div className="lpr-shift-pin">
           <div className="lpr-shift-overlay">
-            <div className="lpr-shift-eyebrow"><span/> The paradigm shift</div>
+            <div className="lpr-shift-eyebrow"><span/> A new way to do money</div>
             <div className="lpr-shift-rail" aria-hidden="true">
               <motion.div className="lpr-shift-rail-fill" style={{ width: railProgress }}/>
             </div>
@@ -721,7 +721,10 @@ export default function LandingPage() {
           >
             <div className="lpr-feat-inner">
               <motion.div className="lpr-feat-text" variants={fade}>
-                <div className="lpr-feat-num">{f.n} <span>/ {f.kicker}</span></div>
+                <div className="lpr-feat-badge">
+                  <span className="lpr-feat-badge-num">{f.n}</span>
+                  <span className="lpr-feat-badge-kicker">{f.kicker}</span>
+                </div>
                 <h3 className="lpr-feat-title">
                   {f.title.map((line, idx) => (
                     <span key={idx} className="lpr-feat-title-line"><em>{line}</em></span>

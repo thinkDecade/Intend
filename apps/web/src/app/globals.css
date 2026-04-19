@@ -3178,6 +3178,72 @@ html.dark .lpr { background: #F5F0E6; color: #1A1612; }
 }
 .lpr-feat-num span { opacity: 0.65; font-weight: 500; }
 
+/* Prominent primitive badge — number chip + kicker label */
+.lpr-feat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 8px 8px;
+  margin-bottom: clamp(24px, 2.6vw, 36px);
+  border-radius: 999px;
+  background: rgba(26, 22, 18, 0.06);
+  border: 1px solid rgba(26, 22, 18, 0.10);
+  backdrop-filter: blur(6px);
+}
+.lpr-feat-badge-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: 999px;
+  background: #1A1612;
+  color: #D4A24A;
+  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.lpr-feat-badge-kicker {
+  font-family: var(--font-display, 'Outfit'), sans-serif;
+  font-size: clamp(14px, 1.05vw, 16px);
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #1A1612;
+  white-space: nowrap;
+}
+
+/* Theme variants */
+.lpr-feat-cream .lpr-feat-badge {
+  background: rgba(26, 22, 18, 0.05);
+  border-color: rgba(26, 22, 18, 0.10);
+}
+.lpr-feat-ink .lpr-feat-badge,
+.lpr-feat-ember .lpr-feat-badge {
+  background: rgba(245, 240, 230, 0.08);
+  border-color: rgba(212, 162, 74, 0.30);
+}
+.lpr-feat-ink .lpr-feat-badge-num,
+.lpr-feat-ember .lpr-feat-badge-num {
+  background: #D4A24A;
+  color: #1A1612;
+}
+.lpr-feat-ink .lpr-feat-badge-kicker,
+.lpr-feat-ember .lpr-feat-badge-kicker {
+  color: #F5F0E6;
+}
+.lpr-feat-gold .lpr-feat-badge {
+  background: rgba(26, 22, 18, 0.10);
+  border-color: rgba(26, 22, 18, 0.20);
+}
+.lpr-feat-gold .lpr-feat-badge-num {
+  background: #1A1612;
+  color: #D4A24A;
+}
+.lpr-feat-gold .lpr-feat-badge-kicker {
+  color: #1A1612;
+}
+
 .lpr-feat-title {
   font-family: var(--font-display, 'Outfit'), sans-serif;
   font-size: clamp(36px, 5.4vw, 72px);
