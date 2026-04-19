@@ -337,44 +337,95 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; bac
 .content { flex: 1; display: flex; overflow: hidden; background: transparent; }
 .chat-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
-/* ── Messages ── */
+/* ── Messages — iMessage-style grouping ─────────────────────────────────────
+   Bubbles from the same sender within ~2 minutes stack tightly (2px gap)
+   and only the LAST bubble in a run gets the rounded tail. A muted
+   timestamp separator floats centred between bursts > 5 min apart. */
 .messages {
-  flex: 1; overflow-y: auto; padding: 36px 32px 20px;
-  display: flex; flex-direction: column; gap: 22px;
+  flex: 1; overflow-y: auto; padding: 28px 28px 18px;
+  display: flex; flex-direction: column; gap: 2px;
   scrollbar-width: thin; scrollbar-color: var(--stroke-2) transparent;
 }
 .messages::-webkit-scrollbar { width: 4px; }
 .messages::-webkit-scrollbar-track { background: transparent; }
 .messages::-webkit-scrollbar-thumb { background: var(--stroke-2); border-radius: 2px; }
 
-.msg {
-  display: flex; flex-direction: column; gap: 5px;
-  animation: msg-in 0.4s var(--ease-out) both;
+.msg-time-sep {
+  align-self: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text4);
+  padding: 14px 0 6px;
+  letter-spacing: 0.04em;
 }
+
+.msg {
+  display: flex; flex-direction: column;
+  animation: msg-in 0.28s var(--ease-out) both;
+}
+.msg.msg--first { margin-top: 10px; }
+.msg.msg--first:first-child { margin-top: 0; }
 @keyframes msg-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
   to   { opacity: 1; transform: none; }
 }
 .msg.user   { align-items: flex-end; }
 .msg.system { align-items: flex-start; }
 
 .msg-bubble {
-  max-width: 68%; padding: 14px 18px; border-radius: var(--r);
-  font-size: 15px; line-height: 1.6;
+  max-width: 72%;
+  padding: 9px 14px;
+  font-size: 15px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  /* Default: pill-rounded; corners get squared off below depending on
+     position in the group (mid-of-run = both adjacent corners flat). */
+  border-radius: 18px;
+  position: relative;
 }
+
+/* User (right) bubbles — amber, no italic, no display font.
+   Keep it conversational and modern, not signage. */
 .msg.user .msg-bubble {
-  background: var(--accent); color: var(--accent-ink); font-weight: 600;
-  border-bottom-right-radius: 6px;
-  box-shadow: var(--shadow-md);
-  font-family: var(--font-display, 'Outfit'), sans-serif;
-  font-style: italic;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 500;
+  border-bottom-right-radius: 18px;
 }
+/* Tail only on the last bubble in a user-run. */
+.msg.user.msg--last .msg-bubble  { border-bottom-right-radius: 5px; }
+/* Mid-of-run on the user side — square the right corners. */
+.msg.user:not(.msg--first):not(.msg--last) .msg-bubble {
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+.msg.user.msg--first:not(.msg--last) .msg-bubble {
+  border-bottom-right-radius: 5px;
+}
+.msg.user.msg--last:not(.msg--first) .msg-bubble {
+  border-top-right-radius: 5px;
+}
+
+/* Agent (left) bubbles — soft pearl surface, ink text. */
 .msg.system .msg-bubble {
-  background: var(--glass-2); border: 1px solid var(--stroke);
-  color: var(--text); border-bottom-left-radius: 6px;
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow-sm);
+  background: var(--bg2);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  font-weight: 400;
+  border-bottom-left-radius: 18px;
 }
+.msg.system.msg--last .msg-bubble  { border-bottom-left-radius: 5px; }
+.msg.system:not(.msg--first):not(.msg--last) .msg-bubble {
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+}
+.msg.system.msg--first:not(.msg--last) .msg-bubble {
+  border-bottom-left-radius: 5px;
+}
+.msg.system.msg--last:not(.msg--first) .msg-bubble {
+  border-top-left-radius: 5px;
+}
+
 .msg-time { font-size: 11px; color: var(--text4); padding: 0 6px; font-family: var(--font-mono); }
 
 /* ── Typing ── */

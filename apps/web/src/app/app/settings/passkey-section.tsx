@@ -63,26 +63,55 @@ export function PasskeySection({ initial }: { initial: PasskeyListItem[] }) {
   }
 
   return (
-    <div className="settings-group" style={{ marginTop: 12 }}>
-      <div className="settings-group-label">Passkeys</div>
-      <div className="settings-row-sub" style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+    <div
+      className="settings-group"
+      style={{ marginTop: 12, minWidth: 0, overflow: 'hidden' }}
+    >
+      <div className="settings-group-label" style={{ color: 'var(--text)' }}>
+        Passkeys
+      </div>
+      <div
+        className="settings-row-sub"
+        style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}
+      >
         Sign in with Face ID, Touch ID, or a hardware security key — no email codes needed.
       </div>
 
       {list.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {list.map(p => (
-            <div key={p.credential_id_pk} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 14px', border: '1px solid var(--stroke-1)', borderRadius: 8,
-            }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>
+            <div
+              key={p.credential_id_pk}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                padding: '10px 14px',
+                border: '1px solid var(--stroke-2)',
+                borderRadius: 8,
+                background: 'var(--surface2)',
+                minWidth: 0,
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: 'var(--text)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
                   {p.device_label ?? 'Unnamed device'}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
                   Added {new Date(p.created_at).toLocaleDateString()}
-                  {p.last_used_at ? ` · Last used ${new Date(p.last_used_at).toLocaleDateString()}` : ' · Never used'}
+                  {p.last_used_at
+                    ? ` · Last used ${new Date(p.last_used_at).toLocaleDateString()}`
+                    : ' · Never used'}
                 </div>
               </div>
               <button
@@ -90,17 +119,32 @@ export function PasskeySection({ initial }: { initial: PasskeyListItem[] }) {
                 onClick={() => handleRemove(p.credential_id_pk)}
                 disabled={pending}
                 style={{
-                  fontSize: 12, color: 'var(--red)',
-                  background: 'transparent', border: '1px solid var(--red-dim)',
-                  borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                  flexShrink: 0,
+                  fontSize: 12,
+                  color: 'var(--red)',
+                  background: 'transparent',
+                  border: '1px solid var(--red-dim)',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  cursor: 'pointer',
                 }}
-              >Remove</button>
+              >
+                Remove
+              </button>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'stretch',
+          flexWrap: 'wrap',
+          minWidth: 0,
+        }}
+      >
         <input
           type="text"
           placeholder="Device name (e.g. MacBook Touch ID)"
@@ -108,19 +152,34 @@ export function PasskeySection({ initial }: { initial: PasskeyListItem[] }) {
           onChange={(e) => setLabel(e.target.value)}
           maxLength={40}
           className="login-input"
-          style={{ flex: 1 }}
+          style={{
+            flex: '1 1 180px',
+            minWidth: 0,
+            background: 'var(--bg)',
+            color: 'var(--text)',
+            border: '1px solid var(--stroke-2)',
+          }}
         />
         <button
           type="button"
           onClick={handleRegister}
           disabled={busy}
           className="login-btn"
-          style={{ width: 'auto', padding: '8px 18px', whiteSpace: 'nowrap' }}
+          style={{
+            flexShrink: 0,
+            width: 'auto',
+            padding: '8px 18px',
+            whiteSpace: 'nowrap',
+          }}
         >
           {busy ? 'Registering…' : list.length === 0 ? 'Add passkey' : 'Add another'}
         </button>
       </div>
-      {error && <div className="login-error" style={{ marginTop: 10 }}>{error}</div>}
+      {error && (
+        <div className="login-error" style={{ marginTop: 10 }}>
+          {error}
+        </div>
+      )}
     </div>
   );
 }

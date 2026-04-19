@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useTransition } from 'react';
+import { useState, useRef, useEffect, useCallback, useTransition, Fragment } from 'react';
 import { completeOnboardingFromChat } from '../actions';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -21,6 +21,8 @@ interface Message {
   plan?:     PlanMeta;
   status?:   'streaming' | 'done' | 'error';
   confirmed?: boolean;
+  /** ms epoch — used for time-gap separators (iMessage style). */
+  ts?:       number;
 }
 
 const SUGGESTIONS = [
@@ -112,9 +114,10 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
 
     // The __onboarding_start__ trigger is invisible — don't show it as a user message
     const isHiddenTrigger = msg === '__onboarding_start__';
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: msg };
+    const now = Date.now();
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: msg, ts: now };
     const assistantId = crypto.randomUUID();
-    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', status: 'streaming' };
+    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', status: 'streaming', ts: now };
 
     if (isHiddenTrigger) {
       setMessages(prev => [...prev, assistantMsg]);
@@ -246,15 +249,40 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
         {isEmpty ? (
           <EmptyState onSuggest={label => void sendMessage(label)} />
         ) : (
-          messages.map(msg => (
-            <MessageRow
-              key={msg.id}
-              msg={msg}
-              confirmingId={confirmingId}
-              onConfirm={handleConfirm}
-              onCancel={handleCancel}
-            />
-          ))
+          messages.map((msg, i) => {
+            const prev = messages[i - 1];
+            const next = messages[i + 1];
+            // iMessage grouping: collapse the gap & hide tail when the next bubble
+            // is from the same sender within ~2 minutes.
+            const TWO_MIN = 2 * 60 * 1000;
+            const isFirstInGroup = !prev || prev.role !== msg.role
+              || ((msg.ts ?? 0) - (prev.ts ?? 0) > TWO_MIN);
+            const isLastInGroup  = !next || next.role !== msg.role
+              || ((next.ts ?? 0) - (msg.ts ?? 0) > TWO_MIN);
+            // Show timestamp separator only when there's a meaningful break
+            // (>5 min) between the previous bubble and this one.
+            const FIVE_MIN = 5 * 60 * 1000;
+            const showTimeSeparator = !prev
+              || ((msg.ts ?? 0) - (prev.ts ?? 0) > FIVE_MIN);
+
+            return (
+              <Fragment key={msg.id}>
+                {showTimeSeparator && msg.ts && (
+                  <div className="msg-time-sep">
+                    {new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+                <MessageRow
+                  msg={msg}
+                  isFirstInGroup={isFirstInGroup}
+                  isLastInGroup={isLastInGroup}
+                  confirmingId={confirmingId}
+                  onConfirm={handleConfirm}
+                  onCancel={handleCancel}
+                />
+              </Fragment>
+            );
+          })
         )}
         <div ref={bottomRef} />
       </div>
@@ -350,29 +378,29 @@ function EmptyState({ onSuggest }: { onSuggest: (label: string) => void }) {
 
 function MessageRow({
   msg,
+  isFirstInGroup,
+  isLastInGroup,
   confirmingId,
   onConfirm,
   onCancel,
 }: {
-  msg:          Message;
-  confirmingId: string | null;
-  onConfirm:    (intentId: string, msgId: string) => void;
-  onCancel:     (intentId: string, msgId: string) => void;
+  msg:            Message;
+  isFirstInGroup: boolean;
+  isLastInGroup:  boolean;
+  confirmingId:   string | null;
+  onConfirm:      (intentId: string, msgId: string) => void;
+  onCancel:       (intentId: string, msgId: string) => void;
 }) {
   const isUser = msg.role === 'user';
+  const groupClasses = [
+    'msg',
+    isUser ? 'user' : 'system',
+    isFirstInGroup ? 'msg--first' : '',
+    isLastInGroup  ? 'msg--last'  : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <div className={`msg ${isUser ? 'user' : 'system'}`}>
-      {/* Role label */}
-      <div className="msg-role-row">
-        <span className="tech-label msg-role-label">
-          {isUser ? 'REQUEST_TX' : 'INTEND_AGENT'}
-        </span>
-        <span className="msg-time">
-          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      </div>
-
+    <div className={groupClasses}>
       <div
         className="msg-bubble"
         style={msg.status === 'error' ? { borderColor: 'var(--red)', color: 'var(--red)' } : undefined}
