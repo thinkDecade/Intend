@@ -1,0 +1,82 @@
+{
+  "manifest_version": 1,
+  "generated_for": "v0.5",
+  "comment": "Pinned SHA-256 of every playbook + provenance. The skill registry refuses to load any playbook whose on-disk SHA-256 does not match this file. Regenerate with: yarn workspace @intend/skills skills:hash. Verify with: yarn workspace @intend/skills skills:verify.",
+  "playbooks": {
+    "aave_v3_base.json": {
+      "skill": "aave_v3",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "b84fc42ff61c27ab276d065506b3ead0f3003a68e90cebc3d01fa1bd64e88811",
+      "source_repo": "internal",
+      "commit": "v0.5"
+    },
+    "aerodrome_base.json": {
+      "skill": "aerodrome",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "4faf84ae433f1e0aeeeb609d5194f197b56a2423930c73f999a0721685a5d4c3",
+      "source_repo": "internal",
+      "commit": "v0.5"
+    },
+    "bankrbot_usdc_base.json": {
+      "skill": "bankrbot_usdc",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "3dc3f8a374f623f94c8da5317a9c3e3190a89ae11fe4e166e722bcd6e3afae18",
+      "source_repo": "external/bankrbot-core",
+      "commit": "v0.5-adapter",
+      "external": true
+    },
+    "erc20_transfer_base.json": {
+      "skill": "erc20_transfer",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "8727c2b9b27cb58f79fd13af5889a12984ba9af8756baa9221394f54ab348708",
+      "source_repo": "internal",
+      "commit": "v0.5"
+    },
+    "eth_addresses_security_base.json": {
+      "skill": "eth_addresses_security",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "f972376a90ef6ce0a55ec9b3af33fa4f617905eca5bd3bae378f31b9fdf4f3c9",
+      "source_repo": "external/austingriffith-ethskills",
+      "commit": "v0.5-adapter",
+      "external": true
+    },
+    "eth_wallets_base.json": {
+      "skill": "eth_wallets",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "66dd94aaeae1c068fbfa6f4f481e54fbeb54ec3377ef55d52ff6b850f46c92b0",
+      "source_repo": "external/austingriffith-ethskills",
+      "commit": "v0.5-adapter",
+      "external": true
+    },
+    "lido_base.json": {
+      "skill": "lido",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "5203a0653df32bc0835c95e25c9829322f7713bcbe3755ab77e8f00918b3b5e0",
+      "source_repo": "internal",
+      "commit": "v0.5"
+    },
+    "morpho_base.json": {
+      "skill": "morpho",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "5bef55d684e8bee326e30e8005653f5d5cfd7138c4f51b6c33cfdd2174e2c441",
+      "source_repo": "internal",
+      "commit": "v0.5"
+    },
+    "uniswap_v3_base.json": {
+      "skill": "uniswap_v3",
+      "chain": "base",
+      "version": "1.0.0",
+      "sha256": "d63f31714d16e7e21936bece202a491d7aa34c1d2877c00be9ccde04e5deca00",
+      "source_repo": "internal",
+      "commit": "v0.5"
+    }
+  }
+}

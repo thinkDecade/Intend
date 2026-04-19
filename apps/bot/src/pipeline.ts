@@ -9,7 +9,8 @@
 
 import { isAddress } from 'viem';
 import type TelegramBot from 'node-telegram-bot-api';
-import { interpretIntent, generateConfirmationMessage, buildUFM, detectModeSwitch } from '@intend/intelligence';
+import { interpretIntent, generateConfirmationMessage, buildUFM, detectModeSwitch, loadERP } from '@intend/intelligence';
+import type { EconomicRealityProfile } from '@intend/core';
 import { getOrCreateWallet, readBalances } from '@intend/execution';
 import { getActivePositions, getActiveGoals, getPendingConfirmations, logEvent, createIntent, scheduleReminders, updateUserSettings, getUserByTelegramId } from '@intend/data';
 import { generatePlan, PrimitiveDisabledError } from '@intend/decision';
@@ -126,17 +127,24 @@ export async function runPipeline(
     return;
   }
 
-  // ── 1. Build UFM ──────────────────────────────────────────────────────────
+  // ── 1. Build UFM + load ERP ───────────────────────────────────────────────
   let ufm: UserFinancialModel;
+  let erp: EconomicRealityProfile | null = null;
   try {
     const network    = process.env['NODE_ENV'] === 'production' ? 'base' : 'base-sepolia';
     const { provider } = await getOrCreateWallet(userId, network as 'base' | 'base-sepolia');
-    const [balances, positions, goals, pending] = await Promise.all([
+    const [balances, positions, goals, pending, erpLoaded] = await Promise.all([
       readBalances(provider, network as 'base' | 'base-sepolia'),
       getActivePositions(userId),
       getActiveGoals(userId),
       getPendingConfirmations(userId),
+      loadERP(userId).catch((err: Error) => {
+        // ERP loader failure is non-fatal — agent still has UFM grounding.
+        console.warn(`[pipeline] loadERP failed for ${userId}:`, err.message);
+        return null;
+      }),
     ]);
+    erp = erpLoaded;
 
     ufm = await buildUFM(userId, {
       balances,
@@ -175,7 +183,7 @@ export async function runPipeline(
 
   let interpretation;
   try {
-    interpretation = await interpretIntent(text, ufm);
+    interpretation = await interpretIntent(text, ufm, erp);
   } catch {
     await bot.sendMessage(chatId, "I couldn't understand that. Could you rephrase?");
     return;
@@ -234,7 +242,7 @@ export async function runPipeline(
   // ── 7. Semi-autonomous path: show confirmation preview ────────────────────
   let preview: string;
   try {
-    preview = await generateConfirmationMessage(plan, ufm);
+    preview = await generateConfirmationMessage(plan, ufm, erp);
     preview = truncate(preview, CONFIRMATION_MAX);
   } catch {
     const label = intention.primitive === 'MOVE' ? 'send' : intention.primitive.toLowerCase();

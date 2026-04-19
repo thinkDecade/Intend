@@ -25,7 +25,11 @@ function getSiteUrl() {
 }
 
 // ── Branded email HTML ────────────────────────────────────────────────────────
-function buildEmailHtml(otp: string | null | undefined, magicLink: string | null | undefined) {
+// OTP-only email. The magic-link button was dropped because admin.generateLink
+// can't issue PKCE links (no client-side code_verifier), and implicit-flow
+// fragments require a client-side bounce that isn't worth the surface. The
+// 6-digit OTP is the canonical entry path; users type it back into /login.
+function buildEmailHtml(otp: string | null | undefined) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -38,14 +42,11 @@ function buildEmailHtml(otp: string | null | undefined, magicLink: string | null
         </td></tr>
         <tr><td style="padding:40px 40px 32px;">
           <h1 style="margin:0 0 8px;font-size:28px;font-weight:800;color:#1A1612;letter-spacing:-0.03em;">Your sign-in code</h1>
-          <p style="margin:0 0 32px;font-size:15px;color:#7D6F62;line-height:1.6;">Use this code to sign in to Intend. It expires in 10 minutes.</p>
+          <p style="margin:0 0 32px;font-size:15px;color:#7D6F62;line-height:1.6;">Enter this code on the sign-in page. It expires in 10 minutes.</p>
           ${otp ? `
-          <div style="background:#F5F0E6;border-radius:12px;padding:24px;text-align:center;margin-bottom:32px;">
+          <div style="background:#F5F0E6;border-radius:12px;padding:24px;text-align:center;">
             <p style="margin:0;font-size:42px;font-weight:800;color:#D4A24A;letter-spacing:0.2em;font-family:'Courier New',monospace;">${otp}</p>
-          </div>
-          <p style="margin:0 0 16px;font-size:14px;color:#7D6F62;">Or click the button below to sign in instantly:</p>
-          ` : '<p style="margin:0 0 16px;font-size:14px;color:#7D6F62;">Click the button below to sign in instantly:</p>'}
-          ${magicLink ? `<a href="${magicLink}" style="display:inline-block;background:#1A1612;color:#F5F0E6;text-decoration:none;padding:14px 28px;border-radius:100px;font-size:14px;font-weight:600;">Open Intend &rarr;</a>` : ''}
+          </div>` : ''}
         </td></tr>
         <tr><td style="padding:24px 40px;border-top:1px solid #E0DACD;">
           <p style="margin:0;font-size:12px;color:#A0907E;">If you didn't request this, ignore it — your account is safe.</p>
@@ -94,8 +95,7 @@ export async function signInWithOtp(formData: FormData) {
         return { error: 'Could not generate sign-in link. Please try again.' };
       }
 
-      const otp       = data?.properties?.email_otp ?? null;
-      const magicLink = data?.properties?.action_link ?? null;
+      const otp = data?.properties?.email_otp ?? null;
 
       // Determine from address — use custom domain if configured, else Resend sandbox
       const fromAddress = process.env['RESEND_FROM_EMAIL'] ?? 'Intend <onboarding@resend.dev>';
@@ -105,7 +105,7 @@ export async function signInWithOtp(formData: FormData) {
         from:    fromAddress,
         to:      email,
         subject: otp ? `${otp} — Your Intend sign-in code` : 'Your Intend sign-in link',
-        html:    buildEmailHtml(otp, magicLink),
+        html:    buildEmailHtml(otp),
       });
 
       if (!emailError) return { success: true };

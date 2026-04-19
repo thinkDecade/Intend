@@ -1,0 +1,22 @@
+{
+  "protocol": "eth_wallets",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0x4200000000000000000000000000000000000006",
+  "actions": {
+    "wrap": {
+      "function": "deposit()",
+      "payload_args": [],
+      "value": "amount_wei"
+    },
+    "unwrap": {
+      "function": "withdraw(uint256)",
+      "payload_args": [
+        { "name": "amount", "source": "amount_wei" }
+      ]
+    }
+  },
+  "tokens": {
+    "WETH": "0x4200000000000000000000000000000000000006"
+  }
+}

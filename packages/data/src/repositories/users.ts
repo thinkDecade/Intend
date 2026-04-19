@@ -171,11 +171,20 @@ export async function updateUserSettings(
     preferred_channel?: 'telegram' | 'whatsapp' | 'web' | null;
     max_auto_tx_usd?: number;
     require_confirm_new_recipient?: boolean;
+    telegram_id?: bigint | null;
+    whatsapp_id?: string | null;
   },
 ): Promise<void> {
+  // Postgres BIGINT must be sent as string from JS — driver will choke on a JS bigint literal.
+  const { telegram_id, ...rest } = settings;
+  const payload: Record<string, unknown> = { ...rest };
+  if (telegram_id !== undefined) {
+    payload['telegram_id'] = telegram_id === null ? null : telegram_id.toString();
+  }
+
   const { error } = await getSupabase()
     .from('users')
-    .update(settings)
+    .update(payload)
     .eq('user_id', userId);
 
   if (error) throw new Error(`[users] updateUserSettings: ${error.message}`);

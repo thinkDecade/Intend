@@ -18,7 +18,8 @@ export type EventType =
   | 'hedge_score_updated'| 'protect_alert_triggered'
   | 'confirmation_sent' | 'reminder_sent'    | 'plan_expired'
   | 'model_fallback_used'
-  | 'x402_payment_sent' | 'x402_payment_received';
+  | 'x402_payment_sent' | 'x402_payment_received'
+  | 'skill_invoked';
 
 export interface EventLogInsert {
   user_id: string;

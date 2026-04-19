@@ -12,9 +12,16 @@ Every surface the user touches. The Telegram bot that receives their messages. T
 **This agent's deliverables:**
 - `apps/bot/src/` — Telegram bot handlers, commands, message pipeline
 - `apps/whatsapp/src/` — WhatsApp Cloud API webhooks and templates
-- `apps/web/` — Next.js 14 App Router: landing page + /app dashboard
-- `packages/data/src/` — Supabase + Upstash clients + all repository classes
-- `supabase/migrations/001_initial_schema.sql` — already complete, do not modify without coordination
+- `apps/web/` — Next.js 14 App Router: landing page + /app dashboard, the onboarding chat at `/onboard`, all passkey routes under `/api/auth/passkey/*`, settings (incl. PasskeySection + Telegram link/unlink), the dashboard `PasskeyNudge`
+- `packages/data/src/` — Supabase + Upstash clients + all repository classes (incl. `economic_reality_profile`, `passkeys`, `passkey_challenges`)
+- `supabase/migrations/00{1..6}_*.sql` — schema is now at migration 006. Do not modify earlier files; add a new numbered migration for any change.
+
+**v0.5_updated repository surface (added in this cycle):**
+- `packages/data/src/repositories/erp.ts` — `getERP`, `upsertERP`. Loaded once per session and injected into the system prompt ahead of UFM.
+- `packages/data/src/repositories/passkeys.ts` — full WebAuthn credential + challenge lifecycle (single-use challenges, 5-min TTL).
+- `packages/data/src/repositories/users.ts` — `updateUserSettings` accepts `telegram_id` (BIGINT serialised via `.toString()`) + `whatsapp_id` for in-product channel linking.
+- `apps/web/src/app/onboard/*` — onboarding chat agent that fills the ERP from natural-language conversation rather than a settings form.
+- `apps/web/src/app/app/_components/PasskeyNudge.tsx` — dismissible banner shown to OTP-only users post-onboarding (7-day localStorage suppression).
 
 ---
 

@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
-import { getUserByEmail, createUser } from '@intend/data';
+import { getUserByEmail, createUser, listPasskeys } from '@intend/data';
 import ChatPanel from './_components/ChatPanel';
+import { PasskeyNudge } from './_components/PasskeyNudge';
 
 export default async function AppPage() {
   const cookieStore = await cookies();
@@ -10,6 +11,7 @@ export default async function AppPage() {
 
   let userId: string | null = null;
   let isOnboarding = false;
+  let hasPasskeys  = true; // default true so we don't flash the nudge for unauthed
   if (user?.email) {
     let dbUser = await getUserByEmail(user.email).catch(() => null);
     // Auto-create if layout didn't catch it
@@ -20,7 +22,16 @@ export default async function AppPage() {
     }
     userId      = dbUser?.user_id ?? null;
     isOnboarding = dbUser ? !dbUser.onboarding_completed : false;
+    if (userId) {
+      const passkeys = await listPasskeys(userId).catch(() => []);
+      hasPasskeys = passkeys.length > 0;
+    }
   }
 
-  return <ChatPanel userId={userId} isOnboarding={isOnboarding} />;
+  return (
+    <>
+      <PasskeyNudge show={!!userId && !isOnboarding && !hasPasskeys} />
+      <ChatPanel userId={userId} isOnboarding={isOnboarding} />
+    </>
+  );
 }

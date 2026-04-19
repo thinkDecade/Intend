@@ -18,7 +18,7 @@
  */
 
 import { generateObject } from 'ai';
-import { IntentionSchema, type IntentionObject, type UserFinancialModel, type ExecutionMode } from '@intend/core';
+import { IntentionSchema, type IntentionObject, type UserFinancialModel, type ExecutionMode, type EconomicRealityProfile } from '@intend/core';
 import { withFallback } from './model-router.js';
 import { buildSystemPrompt } from './system-prompt.js';
 
@@ -125,8 +125,9 @@ export interface InterpretResult {
 export async function interpretIntent(
   rawInput: string,
   ufm: UserFinancialModel,
+  erp?: EconomicRealityProfile | null,
 ): Promise<InterpretResult> {
-  const systemPrompt = buildSystemPrompt(ufm);
+  const systemPrompt = buildSystemPrompt(ufm, erp);
 
   const result = await withFallback((model) =>
     generateObject({

@@ -3,7 +3,19 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
-import { getUserByEmail, updateUserSettings, markOnboardingComplete, getUserPrimaryWallet } from '@intend/data';
+import {
+  getUserByEmail,
+  updateUserSettings,
+  markOnboardingComplete,
+  getUserPrimaryWallet,
+  seedERPFromOnboarding,
+} from '@intend/data';
+import {
+  runOnboardingTurn,
+  type OnboardingState,
+  type OnboardingHistoryEntry,
+  type OnboardingTurnResult,
+} from '@intend/intelligence';
 
 const NETWORK = (process.env['NODE_ENV'] === 'production'
   ? 'base'
@@ -74,6 +86,96 @@ export async function provisionWallet(): Promise<{ address: string } | { error: 
     console.error('[provisionWallet] failed:', err instanceof Error ? err.message : err);
     return { error: 'Wallet provisioning failed. You can continue — it will be created automatically.' };
   }
+}
+
+/**
+ * Run one turn of the conversational onboarding flow.
+ *
+ * The client sends the current state, the conversation history so far, and
+ * the user's latest message. We:
+ *   1. Persist any extracted ERP slots from the previous turn (incremental seed).
+ *   2. Silently kick off wallet provisioning after the location turn.
+ *   3. Return the agent's reply, the next state, and (when ready) the wallet
+ *      address so the UI can reveal it inline.
+ */
+export interface OnboardingTurnResponse extends OnboardingTurnResult {
+  wallet_address?: string | null;
+  error?:          string;
+}
+
+export async function onboardingTurn(args: {
+  state:        OnboardingState;
+  history:      OnboardingHistoryEntry[];
+  user_message: string;
+}): Promise<OnboardingTurnResponse> {
+  const dbUser = await getAuthedUser();
+  if (!dbUser) return {
+    message: '', extracted: {}, next_state: 'greeting', error: 'Not authenticated',
+  };
+
+  let turn: OnboardingTurnResult;
+  try {
+    turn = await runOnboardingTurn(args);
+  } catch (err) {
+    console.error('[onboardingTurn] agent failed:', err);
+    return {
+      message:    "I'm having trouble thinking right now. Give me a moment and try again.",
+      extracted:  {},
+      next_state: args.state,
+      error:      'agent_failed',
+    };
+  }
+
+  // Persist any ERP slots the agent extracted this turn (incremental seed).
+  const slots = turn.extracted;
+  const hasSlots = Object.values(slots).some((v) => v !== undefined && v !== null);
+  if (hasSlots) {
+    try {
+      await seedERPFromOnboarding(dbUser.user_id, {
+        ...(slots.location_country && { location_country: slots.location_country }),
+        ...(slots.location_region !== undefined && { location_region: slots.location_region }),
+        ...(slots.local_currency && { local_currency: slots.local_currency }),
+        ...(slots.income_range   && { income_range:   slots.income_range   }),
+        ...(slots.risk_tolerance && { risk_tolerance: slots.risk_tolerance }),
+        ...(slots.time_horizon   && { time_horizon:   slots.time_horizon   }),
+      });
+      // Mirror location into users table so existing UFM/region-based code keeps working.
+      if (slots.location_country || slots.local_currency) {
+        await updateUserSettings(dbUser.user_id, {
+          ...(slots.location_country && { region:         slots.location_country }),
+          ...(slots.local_currency   && { local_currency: slots.local_currency   }),
+        });
+      }
+    } catch (err) {
+      console.warn('[onboardingTurn] ERP persist failed (non-fatal):', err);
+    }
+  }
+
+  // Silently kick off wallet provisioning the moment we have location.
+  // Don't block the turn response on it — UI polls / reveal step waits for ready.
+  if (slots.location_country) {
+    void provisionWallet().catch(() => { /* non-fatal */ });
+  }
+
+  // When entering the wallet-reveal state, include the address (or null if not ready).
+  let wallet_address: string | null = null;
+  let includeWallet = false;
+  if (turn.reveal_wallet || turn.next_state === 'wallet') {
+    includeWallet = true;
+    const wallet = await provisionWallet();
+    wallet_address = 'address' in wallet ? wallet.address : null;
+  }
+
+  // When finished, mark the user complete.
+  if (turn.finished) {
+    try {
+      await markOnboardingComplete(dbUser.user_id);
+    } catch (err) {
+      console.warn('[onboardingTurn] markOnboardingComplete failed:', err);
+    }
+  }
+
+  return includeWallet ? { ...turn, wallet_address } : { ...turn };
 }
 
 /** Mark onboarding complete and redirect to /app. */

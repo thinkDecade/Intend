@@ -165,15 +165,18 @@ intend/
 │   │   └── src/types/
 │   │       ├── intention.ts           IntentionSchema (Zod), IntentionObject, Primitive
 │   │       ├── ufm.ts                 UserFinancialModel, Balance, Goal, Position
-│   │       └── execution.ts           ExecutionPlan, ExecutionStep, ExecutionStatus
+│   │       ├── execution.ts           ExecutionPlan, ExecutionStep, ExecutionStatus
+│   │       └── erp.ts                 EconomicRealityProfile + 7-dimension enum types
 │   │
 │   ├── intelligence/        LLM reasoning layer
 │   │   └── src/
 │   │       ├── model-router.ts        4-tier fallback chain (Claude → OpenRouter)
-│   │       ├── context-interpreter.ts interpretIntent() — Zod classification
+│   │       ├── context-interpreter.ts interpretIntent(rawInput, ufm, erp?) — Zod classification
 │   │       ├── ufm-builder.ts         buildUFM() — live signal assembly
-│   │       ├── system-prompt.ts       buildSystemPrompt() — UFM injection template
-│   │       └── confirmation.ts        generateConfirmationMessage() / streamConfirmationMessage()
+│   │       ├── erp-loader.ts          loadERP() — durable economic context, derives + persists default on first call
+│   │       ├── onboarding-agent.ts    runOnboardingTurn() — conversational onboarding state machine (greeting→location→income→risk→wallet→intent→done) with per-state Zod extraction
+│   │       ├── system-prompt.ts       buildSystemPrompt(ufm, erp?) — ERP block injected ahead of UFM JSON
+│   │       └── confirmation.ts        generateConfirmationMessage() / streamConfirmationMessage() — both accept optional ERP
 │   │
 │   ├── decision/            Strategy generators
 │   │   └── src/strategy/
@@ -520,16 +523,93 @@ Tiers: 0-0.40 none, 0.40-0.65 monitor, 0.65-0.85 suggest PROTECT, >0.85 emergenc
 
 JSON playbooks define protocol interactions without TypeScript changes:
 
-| Playbook | Protocol | Actions |
-|----------|----------|---------|
-| `aave_v3_base.json` | Aave V3 | supply, withdraw, borrow, repay |
-| `morpho_base.json` | Morpho | supply, withdraw |
-| `aerodrome_base.json` | Aerodrome | swap |
-| `uniswap_v3_base.json` | Uniswap V3 | swap, quote |
-| `lido_base.json` | Lido | stake, unstake |
-| `erc20_transfer_base.json` | ERC-20 | transfer |
+| Playbook | Protocol | Actions | Source |
+|----------|----------|---------|--------|
+| `aave_v3_base.json` | Aave V3 | supply, withdraw, borrow, repay | internal |
+| `morpho_base.json` | Morpho | supply, withdraw | internal |
+| `aerodrome_base.json` | Aerodrome | swap | internal |
+| `uniswap_v3_base.json` | Uniswap V3 | swap, quote | internal |
+| `lido_base.json` | Lido | stake, unstake | internal |
+| `erc20_transfer_base.json` | ERC-20 | transfer | internal |
+| `eth_wallets_base.json` | WETH9 | wrap, unwrap | external (Austin Griffith) |
+| `bankrbot_usdc_base.json` | USDC (Base) | transfer, approve | external (BankrBot core) |
+| `eth_addresses_security_base.json` | ERC-20 approval hygiene | revoke_allowance | external (Austin Griffith) |
 
-Adding a new protocol = adding a JSON file. Zero TypeScript changes.
+Adding a new protocol = adding a JSON file + re-running `skills:hash`. Zero TypeScript changes.
+
+### Verification Pipeline (Phase 11)
+
+Every playbook is checksum-pinned in `packages/skills/manifest.json`:
+
+```jsonc
+{
+  "manifest_version": 1,
+  "generated_for": "v0.5",
+  "playbooks": {
+    "aave_v3_base.json": {
+      "skill": "aave_v3", "chain": "base", "version": "1.0.0",
+      "sha256": "b84fc42f…",
+      "source_repo": "internal", "commit": "v0.5"
+    },
+    "bankrbot_usdc_base.json": { …, "external": true }
+  }
+}
+```
+
+`loadPlaybook(protocol, chain)` in `packages/skills/src/loader.ts` enforces:
+1. File present on disk → else `[loader] Playbook not found`.
+2. Manifest entry exists for `<protocol>_<chain>.json` → else `SkillVerificationError(reason='unpinned')`.
+3. SHA-256 of the file bytes equals `entry.sha256` → else `SkillVerificationError(reason='mismatch')`.
+4. Manifest itself loads cleanly → else `SkillVerificationError(reason='missing_manifest')`.
+
+Local-dev escape hatch: `INTEND_SKILLS_SKIP_VERIFY=1`. Hard-blocked when `NODE_ENV=production`.
+
+### CLI
+
+```bash
+# Re-hash all playbooks and rewrite manifest.json (preserves provenance metadata).
+yarn workspace @intend/skills skills:hash
+
+# Verify on-disk SHA-256 matches manifest. Exits 1 on drift / unpinned / missing.
+yarn workspace @intend/skills skills:verify
+```
+
+`skills:verify` is intended to run in CI on every PR.
+
+### Sandbox Boundary
+
+The Skill Registry is a **pure encoder** (documented inline in `registry.ts`):
+
+- No filesystem access outside `readFileSync` of pinned playbooks.
+- No network access — token decimals + chain IDs are static maps.
+- No private-key access — `buildTransaction` returns *unsigned* txs only; AgentKit signs.
+- No DB access — observability is delegated via `setSkillAuditHook` so `@intend/skills` stays a leaf node in the package DAG.
+
+### Audit Logging (`event_log.event_type='skill_invoked'`)
+
+Wired in `packages/execution/src/action-dispatcher.ts`. Every successful `buildTransaction` call writes one append-only row:
+
+```ts
+{
+  user_id, intent_id,
+  event_type: 'skill_invoked',
+  source: 'telegram' | 'whatsapp' | 'web',
+  event_data: {
+    skill, chain, action, network,
+    version, sha256, external,
+    args_hash,   // SHA-256 of the SkillRequest.args (redacted, deterministic)
+    tx_count     // number of unsigned txs produced (approve + action)
+  }
+}
+```
+
+Audit writes are fire-and-forget (`.catch(() => {})`) — observability never blocks an execution.
+
+Public API surface (`packages/skills/src/index.ts`):
+- `buildTransaction`, `getPlaybook`, `listProtocols`
+- `loadPlaybook`, `clearPlaybookCache`, `listManifest`, `getManifestEntry`
+- `SkillVerificationError`
+- `setSkillAuditHook`, `hashArgs`, types `SkillAuditEvent`, `SkillAuditHook`, `ManifestSummary`
 
 ---
 
@@ -692,13 +772,58 @@ On completion: `completeOnboarding()` calls `markOnboardingComplete(userId)` the
 Message
   → Step 0: detectModeSwitch() [regex, no LLM — handles "go autonomous", "ask me first"]
   → getUserByTelegramId → loadSession(redis)
+  → Promise.all([ readBalances, getActivePositions, getActiveGoals, getPendingConfirmations, loadERP ])
   → buildUFM(userId, { balances, positions, goals, pending })
-  → interpretIntent(text, ufm)    [open reasoning, assumptions layer]
+  → interpretIntent(text, ufm, erp)    [open reasoning + ERP grounding when present]
   → generatePlan(intention, ufm, ctx)
   → checkPermission() [semi: always confirm, PROTECT: always confirm, autonomous: skip]
-  → generateConfirmationMessage(plan, ufm)
+  → generateConfirmationMessage(plan, ufm, erp)
   → Send preview with [Confirm] [Cancel] inline keyboard
 ```
+
+ERP load is non-fatal: a missed profile logs a warning and falls back to UFM-only grounding so user-facing flows never break on a stale signal.
+
+### Cross-Channel Parity (Phase 12)
+
+The v0.5_updated "unified session" promise: any user state Intend writes is per-`user_id`, never per-channel. Linking Telegram via `/connect` collapses the two channel identities onto one row.
+
+**The `/connect` flow:**
+
+1. User runs `/connect` in Telegram. Bot generates a 6-digit code, stores `intend:link_code:{code} = { telegram_id, user_id }` in Redis with `EX 300`, and sends the code to the user.
+2. User opens the **Web → Settings** page, enters the code into the Telegram channel card, presses *Link Telegram*.
+3. The `linkTelegram(formData)` server action (`apps/web/src/app/app/actions.ts`):
+   - validates the code is 6 digits
+   - reads + JSON-parses the Redis entry
+   - rejects if a *different* Intend user already holds that `telegram_id`
+   - calls `updateUserSettings(user_id, { telegram_id })` — the BIGINT is serialised to string for Postgres
+   - deletes the Redis code (single-use)
+   - writes `event_log.event_type='channel_linked'` with `event_data: { channel: 'telegram', telegram_id }`
+4. `unlinkTelegram()` is the symmetric reversal — sets `telegram_id = NULL` and logs the unlink.
+
+**What's unified vs. per-channel after linking:**
+
+| State | Storage | Scope |
+|-------|---------|-------|
+| ERP (Economic Reality Profile) | `economic_reality_profile` table | per-user — both channels read the same row |
+| UFM (positions, goals, intents, balances) | Postgres + AgentKit | per-user |
+| `event_log` audit trail | `event_log` table | per-user, channel recorded as `source` column |
+| Conversation history (recent N turns) | `sessions.history` | per-`(user_id, channel)` — intentional: a Telegram thread and a web chat are different surfaces |
+| Live session (state machine, pending plan) | Redis `intend:session:{channel}:{user_id}` (30 min TTL) + `sessions` durable backup | per-`(user_id, channel)` |
+
+The Telegram bot's `getSession()` reads Redis first and falls back to the durable `sessions` row, so a session evicted from Redis is still recoverable — and forensic replay across channels is possible from the `sessions` + `event_log` tables alone.
+
+**Smoke test:** `tests/cross-channel.e2e.ts` exercises the full path against live Supabase + Upstash:
+
+```bash
+yarn tsx tests/cross-channel.e2e.ts
+```
+
+Asserts:
+- ERP written via web is read by `loadERP()` (the same call the Telegram pipeline makes)
+- `/connect` code in Redis can be consumed and `getUserByTelegramId(tg)` resolves to the web `user_id`
+- A Telegram session row persisted to Supabase round-trips with history intact
+
+The script seeds and tears down its own fixtures; safe to run repeatedly. Exits 1 on any assertion failure (CI-friendly).
 
 ### Proactive Monitor (Phase 3)
 
@@ -764,6 +889,9 @@ IDLE → CLARIFYING → CONFIRMING → EXECUTING → IDLE
 | `002_execution_mode.sql` | Added `execution_mode` column to users |
 | `003_onboarding_flag.sql` | Added `onboarding_completed BOOLEAN DEFAULT FALSE` to users |
 | `004_reset_onboarding.sql` | Reset all existing users to `onboarding_completed = FALSE` for new flow |
+| `005_economic_reality_profile.sql` | New `economic_reality_profile` table (7 ERP dimensions + provenance) · enables `pgvector` extension · adds `erp_embedding vector(1536)` reserved for v0.6 · RLS: users read own row only |
+| `005a_backfill_erp_from_users.sql` | Seeds an ERP row for every existing user from `region` + `local_currency` with conservative country-derived risk levels (`seed_source = 'backfill'`) |
+| `006_passkey_credentials.sql` | `passkey_credentials` (WebAuthn registrations: `credential_id` UNIQUE, `public_key BYTEA`, `counter BIGINT`, `transports TEXT[]`, `device_label`) + `passkey_challenges` (single-use registration/auth challenges with TTL). RLS enabled on both. |
 
 ### Tables
 
@@ -783,6 +911,7 @@ IDLE → CLARIFYING → CONFIRMING → EXECUTING → IDLE
 | `revenue_events` | Intend fee tracking | **Append-only** |
 | `event_log` | Complete audit trail | **Append-only** |
 | `parallel_lanes` | Concurrent intent execution | - |
+| `economic_reality_profile` | Durable economic context (location, currency_risk, inflation_context_pct, political_risk, income_range, risk_tolerance, time_horizon, seed_source) loaded once per session and injected into the system prompt ahead of UFM | PK: user_id · FK cascade · RLS: read own row |
 
 ### Critical Rules
 
@@ -827,6 +956,36 @@ IDLE → CLARIFYING → CONFIRMING → EXECUTING → IDLE
 **Current configuration:** Supabase custom SMTP → Gmail (`smtp.gmail.com:587`, username: `thinkdecade@gmail.com`). 500 emails/day. No domain required.
 
 **Future (when domain verified):** Add `RESEND_FROM_EMAIL=Intend <hello@yourdomain.com>` to Netlify env vars → Resend branded email activates automatically via PATH A.
+
+### Passkey Flow (WebAuthn — Phase 13)
+
+Equal-prominence second auth path. Email OTP remains the canonical recovery channel; passkeys are an opt-in upgrade for friction-free re-login.
+
+**Routes (all under `/api/auth/passkey/`):**
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST register/options` | Supabase session | Generates `PublicKeyCredentialCreationOptions` via SimpleWebAuthn, stores challenge in `passkey_challenges` (single-use, 5-min TTL), excludes already-registered credentials |
+| `POST register/verify` | Supabase session | Consumes challenge, calls `verifyRegistrationResponse`, persists `credential_id` + `public_key` (BYTEA via `\x{hex}`) + `transports` + `device_label`. Logs `event_log.event_type='channel_linked'` |
+| `POST login/options` | Anonymous | Returns assertion options for the email. **Never leaks whether the email exists** — when no user matches, returns options keyed to a per-email SHA-256 surrogate so probing is indistinguishable from a real account |
+| `POST login/verify` | Anonymous | Verifies assertion + anti-cloning counter check (`newCounter > 0 && newCounter <= cred.counter` → reject). On success, mints a Supabase session via `admin.generateLink({ type: 'magiclink' })` → `verifyOtp({ token_hash, type: 'magiclink' })` (token never leaves the server) and sets the auth cookie |
+| `GET list` / `DELETE list` | Supabase session | List authed user's passkeys / remove one by `credential_id_pk` |
+
+**RP context:** derived per-request from the `Origin` header (`rpFromRequest`) so production, staging, and `localhost` all work without redeploys.
+
+**Single-use challenges:** `setChallenge` writes `(user_id, challenge, type)` to `passkey_challenges`; `consumeChallenge` deletes-and-returns atomically with a 300s default TTL.
+
+**Surfaces:**
+- `/login` — passkey button + OTP input separated by an "or" divider, no "recommended" hierarchy
+- `/app/settings#passkeys` — `PasskeySection` lists registered authenticators (label, added date, last used) with register + remove actions via `@simplewebauthn/browser`
+- `/app` — `PasskeyNudge` banner shown when `userId && !isOnboarding && passkeys.length === 0`. Dismissible via `localStorage` (`intend:passkey_nudge_dismissed_at`, 7-day suppression). The "first deposit" reinforcement point is reserved as a Phase-2 surface via the `data-passkey-nudge` flag on the success message in ChatPanel.
+
+**Repository:** `packages/data/src/repositories/passkeys.ts` — `listPasskeys`, `findCredentialById`, `insertPasskey`, `bumpCounter`, `deletePasskey`, `setChallenge`, `consumeChallenge`, plus base64url ↔ bytes helpers.
+
+**Security notes:**
+- Service role used server-side only; passkey routes never expose the magic-link token to the client
+- `counter` is BIGINT and incremented atomically on every successful assertion; cloned-authenticator detection rejects assertions whose counter has not advanced
+- Public keys stored as raw `BYTEA` (no encoding tax on verify path)
 
 **Email content:** Inline HTML template in `login/actions.ts` — gold `#D4A24A` OTP code, `#1A1612` background, magic link button. OTP display conditional on whether `admin.generateLink` returned `email_otp`.
 

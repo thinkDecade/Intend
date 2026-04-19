@@ -1,7 +1,8 @@
 'use client';
 
 import { Suspense, useState, useTransition, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { signInWithOtp, verifyOtp } from './actions';
 
 export default function LoginPage() {
@@ -17,8 +18,47 @@ function LoginForm() {
   const [email, setEmail]   = useState('');
   const [token, setToken]   = useState('');
   const [error, setError]   = useState('');
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
   const searchParams = useSearchParams();
+  const router       = useRouter();
+
+  async function handlePasskey() {
+    setError('');
+    if (!email.trim()) {
+      setError('Enter your email first, then sign in with a passkey.');
+      return;
+    }
+    setPasskeyBusy(true);
+    try {
+      const optsRes = await fetch('/api/auth/passkey/login/options', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body:   JSON.stringify({ email: email.trim() }),
+      });
+      if (!optsRes.ok) throw new Error('Could not start passkey sign-in.');
+      const { options } = await optsRes.json();
+
+      const assertion = await startAuthentication(options);
+
+      const verifyRes = await fetch('/api/auth/passkey/login/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body:   JSON.stringify({ email: email.trim(), response: assertion }),
+      });
+      const json = await verifyRes.json();
+      if (!verifyRes.ok || !json.ok) throw new Error(json.error ?? 'Passkey sign-in failed.');
+
+      router.push('/app');
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Passkey sign-in failed.';
+      // The browser surfaces a friendly cancellation; treat NotAllowedError as a no-op.
+      if (!/NotAllowed|abort/i.test(msg)) setError(msg);
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (searchParams.get('error') === 'auth_failed') {
@@ -88,14 +128,32 @@ function LoginForm() {
                 autoFocus
                 placeholder="you@example.com"
                 className="login-input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
               <button
                 type="submit"
-                disabled={isPending}
+                disabled={isPending || passkeyBusy}
                 className="login-btn"
               >
-                {isPending ? 'Sending…' : 'Continue →'}
+                {isPending ? 'Sending…' : 'Email me a code →'}
               </button>
+
+              {/* Equal-prominence second path. No "recommended" hierarchy. */}
+              <div className="login-divider"><span>or</span></div>
+
+              <button
+                type="button"
+                onClick={handlePasskey}
+                disabled={isPending || passkeyBusy}
+                className="login-btn"
+                style={{ background: 'transparent', color: 'var(--text)', border: '1.5px solid var(--text)' }}
+              >
+                {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+              </button>
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+                Both options sign you in. Pick whichever you prefer.
+              </div>
             </form>
           ) : (
             <form onSubmit={handleOtpSubmit} autoComplete="off">

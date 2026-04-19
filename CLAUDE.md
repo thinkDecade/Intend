@@ -34,18 +34,18 @@ Finance was built around products. Intend rebuilds it around intentions. For cen
 
 ## The Eight Financial Primitives
 
-| Primitive | What it does |
-|-----------|-------------|
-| PROTECT | Move capital to safety from currency/inflation risk |
-| GROW | Deploy idle capital to yield-generating positions |
-| MOVE | Transfer value to another person — any asset, any destination |
-| CONVERT | Exchange one asset for another at best available rate |
-| SAVE | Goal-based capital accumulation with named target |
-| EARN | Detect and intelligently route incoming value |
-| INVEST | Acquire assets the user wants to hold with conviction |
-| SPEND | Execute payments via Visa MCP, x402, or Crypto Checkout |
+| Primitive | What it does | v0.5_updated status |
+|-----------|--------------|---------------------|
+| PROTECT | Move capital to safety from currency/inflation risk | ✅ active |
+| MOVE | Transfer value to another person — any asset, any destination | ✅ active |
+| CONVERT | Exchange one asset for another at best available rate | ✅ active |
+| SPEND | Execute payments via Visa MCP, x402, or Crypto Checkout | ✅ active |
+| GROW | Deploy idle capital to yield-generating positions | gated (post-v0.5) |
+| SAVE | Goal-based capital accumulation with named target | gated (post-v0.5) |
+| EARN | Detect and intelligently route incoming value | gated (post-v0.5) |
+| INVEST | Acquire assets the user wants to hold with conviction | gated (post-v0.5) |
 
-All 8 primitives ship in v0.5 at "v1 basic level" — happy path works end-to-end. No half-built edge cases.
+**v0.5_updated framing:** four primitives ship live (PROTECT, MOVE, CONVERT, SPEND). The other four are gated, not deleted — the routers, types, and skill scaffolding remain so they can be flipped on without re-architecture. See `BUILD_PLAN.md` for the canonical phase ledger.
 
 ---
 
@@ -214,9 +214,13 @@ systemctl --user restart openclaw-gateway
 - `supabase/migrations/` — numbered SQL files only, never manual ALTER TABLE
 
 ### Build Direction
-- `BUILD_PLAN.md` at the project root is the source of truth for the current build direction
+- `BUILD_PLAN.md` at the project root is the source of truth for the current build direction. The active spec is **v0.5_updated** (four active primitives + ERP + onboarding agent + skill verification + passkey auth).
 - Before starting any session, read BUILD_PLAN.md to understand which phase is active and what is done
 - Tick off completed checklist items in BUILD_PLAN.md as work is completed
+- Phases 0–13 are complete. Phase 14 (this docs refresh) closes out v0.5_updated.
+
+### Operational Scripts
+- `scripts/wipe-users.ts` + `scripts/wipe-users.sql` — full-environment user reset (auth.users + per-user Redis namespaces; SQL file truncates application tables, bypassing the `event_log` append-only trigger). Requires `INTEND_WIPE_CONFIRM=YES`. Use before staging-to-mainnet cutovers and before demo runs.
 
 ### Documentation (Mandatory After Every Phase)
 - After every phase in BUILD_PLAN.md completes, update `DOCUMENTATION.md` before moving to the next phase

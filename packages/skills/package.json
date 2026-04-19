@@ -8,7 +8,9 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "skills:verify": "node scripts/verify.mjs",
+    "skills:hash": "node scripts/hash.mjs"
   },
   "dependencies": {
     "@intend/core": "*",

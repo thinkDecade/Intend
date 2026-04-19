@@ -1,5 +1,5 @@
 import { generateText, streamText } from 'ai';
-import type { ExecutionPlan, UserFinancialModel } from '@intend/core';
+import type { ExecutionPlan, UserFinancialModel, EconomicRealityProfile } from '@intend/core';
 import { withFallback, getModel } from './model-router.js';
 import { buildSystemPrompt } from './system-prompt.js';
 
@@ -26,11 +26,12 @@ Rules — all must be satisfied:
 export async function generateConfirmationMessage(
   plan: ExecutionPlan,
   ufm: UserFinancialModel,
+  erp?: EconomicRealityProfile | null,
 ): Promise<string> {
   const result = await withFallback((model) =>
     generateText({
       model,
-      system: buildSystemPrompt(ufm),
+      system: buildSystemPrompt(ufm, erp),
       prompt: `${CONFIRMATION_RULES}\n\nExecution plan:\n${JSON.stringify(plan, null, 2)}`,
     })
   );
@@ -46,10 +47,11 @@ export async function generateConfirmationMessage(
 export async function streamConfirmationMessage(
   plan: ExecutionPlan,
   ufm: UserFinancialModel,
+  erp?: EconomicRealityProfile | null,
 ): Promise<AsyncIterable<string>> {
   const { textStream } = streamText({
     model: getModel('primary'),
-    system: buildSystemPrompt(ufm),
+    system: buildSystemPrompt(ufm, erp),
     prompt: `${CONFIRMATION_RULES}\n\nExecution plan:\n${JSON.stringify(plan, null, 2)}`,
   });
   return textStream;

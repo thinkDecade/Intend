@@ -1,0 +1,25 @@
+{
+  "protocol": "bankrbot_usdc",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "actions": {
+    "transfer": {
+      "function": "transfer(address,uint256)",
+      "payload_args": [
+        { "name": "to",     "source": "from_address" },
+        { "name": "amount", "source": "amount_wei" }
+      ]
+    },
+    "approve": {
+      "function": "approve(address,uint256)",
+      "payload_args": [
+        { "name": "spender", "source": "from_address" },
+        { "name": "amount",  "source": "amount_wei_or_max" }
+      ]
+    }
+  },
+  "tokens": {
+    "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+  }
+}

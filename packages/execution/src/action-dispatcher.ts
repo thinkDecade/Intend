@@ -1,9 +1,9 @@
 import type { CdpEvmWalletProvider } from '@coinbase/agentkit';
 import type { ExecutionPlan, ExecutionStep } from '@intend/core';
-import { buildTransaction } from '@intend/skills';
+import { buildTransaction, getManifestEntry, hashArgs } from '@intend/skills';
 import type { SkillRequest } from '@intend/skills';
 import { executeAtomic, type AtomicStep } from './atomicity-wrapper.js';
-import { getSupabase } from '@intend/data';
+import { getSupabase, logEvent } from '@intend/data';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export async function dispatch(
   const tx_hashes: string[] = [];
 
   const atomicSteps: AtomicStep[] = plan.steps.map(step =>
-    buildAtomicStep(step, walletAddress, provider, tx_hashes, channel)
+    buildAtomicStep(step, walletAddress, provider, tx_hashes, channel, plan.user_id, plan.plan_id)
   );
 
   try {
@@ -65,7 +65,9 @@ function buildAtomicStep(
   walletAddress: `0x${string}`,
   provider:      CdpEvmWalletProvider,
   tx_hashes:     string[],
-  channel:       string
+  channel:       string,
+  userId:        string,
+  intentId:      string,
 ): AtomicStep {
   return {
     name: step.name,
@@ -84,6 +86,27 @@ function buildAtomicStep(
       };
 
       const unsignedTxs = await buildTransaction(req);
+
+      // Append-only audit: skill_invoked. Fire-and-forget — never block tx.
+      const manifestEntry = getManifestEntry(req.protocol, req.chain);
+      logEvent({
+        user_id:    userId,
+        intent_id:  intentId,
+        event_type: 'skill_invoked',
+        source:     channel as 'telegram' | 'whatsapp' | 'web',
+        event_data: {
+          skill:     req.protocol,
+          chain:     req.chain,
+          action:    req.action,
+          network:   req.network,
+          version:   manifestEntry?.version  ?? 'unknown',
+          sha256:    manifestEntry?.sha256   ?? 'unknown',
+          external:  manifestEntry?.external ?? false,
+          args_hash: hashArgs(req.args),
+          tx_count:  unsignedTxs.length,
+        },
+      }).catch(() => { /* observability must never break execution */ });
+
       const hashes: string[] = [];
 
       for (const utx of unsignedTxs) {

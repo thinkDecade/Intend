@@ -1,10 +1,37 @@
-import type { UserFinancialModel } from '@intend/core';
+import type { UserFinancialModel, EconomicRealityProfile } from '@intend/core';
 
-export function buildSystemPrompt(ufm: UserFinancialModel): string {
+/**
+ * Render the ERP as a compact, plain-language block. The agent sees this
+ * before the UFM JSON so it has stable "who is this person, economically"
+ * grounding before reasoning about today's balances and FX/APY snapshot.
+ */
+function renderErpBlock(erp: EconomicRealityProfile): string {
+  const lines: string[] = [];
+  lines.push(`Location:        ${erp.location_country}${erp.location_region ? ` (${erp.location_region})` : ''}`);
+  lines.push(`Local currency:  ${erp.local_currency}  ·  currency risk: ${erp.currency_risk}`);
+  if (erp.inflation_context_pct !== null) {
+    lines.push(`Inflation:       ${erp.inflation_context_pct}% annual`);
+  }
+  lines.push(`Political risk:  ${erp.political_risk}`);
+  lines.push(`Income range:    ${erp.income_range.replace(/_/g, ' ')}`);
+  lines.push(`Risk tolerance:  ${erp.risk_tolerance}`);
+  lines.push(`Time horizon:    ${erp.time_horizon}`);
+  lines.push(`Profile source:  ${erp.seed_source} (seeded ${erp.last_seeded_at.slice(0, 10)})`);
+  return lines.join('\n');
+}
+
+export function buildSystemPrompt(
+  ufm: UserFinancialModel,
+  erp?: EconomicRealityProfile | null,
+): string {
+  const erpBlock = erp
+    ? `\nEconomic reality (durable context — refer to this when reasoning about what's sensible for this person):\n${renderErpBlock(erp)}\n`
+    : '';
+
   return `You are Intend — a world-class financial concierge.
 You operate on behalf of ${ufm.identity.intend_handle ?? 'this user'}.
-
-Their current financial context:
+${erpBlock}
+Their current financial context (live snapshot — refreshed every turn):
 ${JSON.stringify(ufm, null, 2)}
 
 Your role:

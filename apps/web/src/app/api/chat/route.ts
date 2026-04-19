@@ -9,9 +9,10 @@ import {
 } from '@intend/data';
 import type { Balance } from '@intend/core';
 import {
-  buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch,
+  buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch, loadERP,
 } from '@intend/intelligence';
-import { updateUserSettings, logEvent, markOnboardingComplete } from '@intend/data';
+import type { EconomicRealityProfile } from '@intend/core';
+import { updateUserSettings, logEvent, markOnboardingComplete, seedERPFromOnboarding } from '@intend/data';
 import { generatePlan } from '@intend/decision';
 import { getModel } from '@intend/intelligence';
 import { generateObject } from 'ai';
@@ -89,12 +90,16 @@ export async function POST(req: NextRequest) {
 
         const CHAIN = process.env['NODE_ENV'] === 'production' ? 'base' : 'base_sepolia';
 
-        const [positions, goals, pending, walletRow, cachedBalances] = await Promise.all([
+        const [positions, goals, pending, walletRow, cachedBalances, erp] = await Promise.all([
           getActivePositions(userId).catch(() => []),
           getActiveGoals(userId).catch(() => []),
           getPendingConfirmations(userId).catch(() => []),
           getUserPrimaryWallet(userId, CHAIN as 'base' | 'base_sepolia').catch(() => null),
           cacheGet<Balance[]>(keys.userBalances(userId)).then(c => c?.data ?? []).catch(() => [] as Balance[]),
+          loadERP(userId).catch((err: Error) => {
+            console.warn(`[chat] loadERP failed for ${userId}:`, err.message);
+            return null as EconomicRealityProfile | null;
+          }),
         ]);
 
         const ufm = await buildUFM(userId, {
@@ -126,7 +131,7 @@ export async function POST(req: NextRequest) {
         });
 
         // 2. Classify intent — is this financial or conversational?
-        const interpretation = await interpretIntent(message, ufm);
+        const interpretation = await interpretIntent(message, ufm, erp);
         const { intention, needs_clarification, clarification_question } = interpretation;
 
         const isHighConfidenceFinancial =
@@ -162,7 +167,9 @@ export async function POST(req: NextRequest) {
             send({ type: 'text', content: chunk });
           }
 
-          // Onboarding extraction — after 2+ user messages, try to extract profile data
+          // Onboarding extraction — after 2+ user messages, try to extract profile data.
+          // We extract incrementally so the UI can reflect partial state, and we only
+          // commit + complete once every required ERP field is filled.
           if (isOnboarding) {
             const userTurns = allMessages.filter(m => m.role === 'user').length;
             if (userTurns >= 2) {
@@ -174,28 +181,67 @@ export async function POST(req: NextRequest) {
                 const { object: profile } = await generateObject({
                   model: getModel('primary'),
                   schema: z.object({
-                    display_name:     z.string().nullable().describe('The user\'s first name or preferred name, null if not yet given'),
-                    local_currency:   z.string().nullable().describe('3-letter ISO currency code inferred from what the user said, null if unclear'),
-                    execution_mode:   z.enum(['autonomous', 'semi_autonomous']).nullable().describe('autonomous if user wants Intend to act without asking, semi_autonomous if they want to confirm first, null if not yet clear'),
-                    profile_complete: z.boolean().describe('true only when display_name AND local_currency are both known'),
+                    display_name:     z.string().nullable()
+                      .describe("The user's first name or preferred name, null if not yet given"),
+                    location_country: z.string().nullable()
+                      .describe('ISO 3166-1 alpha-2 country code inferred from what the user said (e.g. "GH", "US", "NG"). null if unclear.'),
+                    local_currency:   z.string().nullable()
+                      .describe('3-letter ISO 4217 currency code (e.g. "GHS", "USD", "NGN"). null if unclear.'),
+                    income_range: z.enum(['under_500_month','500_2k_month','2k_10k_month','10k_50k_month','over_50k_month','undisclosed'])
+                      .nullable()
+                      .describe('Best-fit income band the user described, or "undisclosed" if they declined. null if not yet asked/answered.'),
+                    risk_tolerance: z.enum(['preservation','cautious','balanced','growth','aggressive'])
+                      .nullable()
+                      .describe('The user\'s self-described attitude to risk. null if not yet clear.'),
+                    time_horizon: z.enum(['immediate','short','medium','long','mixed'])
+                      .nullable()
+                      .describe('Primary planning horizon: immediate=weeks, short=months, medium=1-3y, long=5y+, mixed=multiple. null if not yet clear.'),
+                    execution_mode: z.enum(['autonomous','semi_autonomous']).nullable()
+                      .describe('autonomous = act within limits & report back; semi_autonomous = confirm every plan first. null if not yet clear.'),
+                    profile_complete: z.boolean()
+                      .describe('true only when display_name, location_country, local_currency, income_range, risk_tolerance, time_horizon, and execution_mode are ALL known.'),
                   }),
-                  prompt: `Extract the user's setup preferences from this onboarding conversation:\n\n${transcript}\n\nReturn null for any field that hasn't been clearly stated.`,
+                  prompt: `Extract the user's Economic Reality Profile from this onboarding conversation.\nReturn null for any field that hasn't been clearly stated.\nFor income, "rather not say" or any decline maps to "undisclosed".\n\n${transcript}`,
                 });
 
-                if (profile.display_name || profile.local_currency || profile.execution_mode) {
-                  send({ type: 'onboarding_data', profile });
-                }
+                // Stream partial state so the client can render progress if it wants.
+                send({ type: 'onboarding_data', profile });
 
-                if (profile.profile_complete && profile.display_name && profile.local_currency) {
-                  // Save and mark complete on the server
+                if (
+                  profile.profile_complete &&
+                  profile.display_name &&
+                  profile.location_country &&
+                  profile.local_currency &&
+                  profile.income_range &&
+                  profile.risk_tolerance &&
+                  profile.time_horizon
+                ) {
+                  // 1. users row — name + currency + automation mode
                   await updateUserSettings(userId, {
                     display_name:   profile.display_name,
                     local_currency: profile.local_currency,
+                    region:         profile.location_country,
                     ...(profile.execution_mode ? { execution_mode: profile.execution_mode } : {}),
                   });
+
+                  // 2. ERP row — full economic context, seed_source = 'onboarding'
+                  //    We leave currency_risk / political_risk / inflation_context_pct
+                  //    on the migration defaults; the enrichment job refines them later
+                  //    from country-level signals.
+                  await seedERPFromOnboarding(userId, {
+                    location_country: profile.location_country,
+                    local_currency:   profile.local_currency,
+                    income_range:     profile.income_range,
+                    risk_tolerance:   profile.risk_tolerance,
+                    time_horizon:     profile.time_horizon,
+                  });
+
+                  // 3. Flip the flag last — if anything above throws, the next chat
+                  //    turn will retry the extraction rather than landing the user
+                  //    in /app with a half-filled ERP.
                   await markOnboardingComplete(userId);
 
-                  // Provision wallet (non-fatal)
+                  // 4. Provision wallet (non-fatal)
                   try {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const execution = await import('@intend/execution' as any);
@@ -205,7 +251,10 @@ export async function POST(req: NextRequest) {
 
                   send({ type: 'onboarding_complete' });
                 }
-              } catch { /* extraction is non-fatal */ }
+              } catch (extractionErr) {
+                console.warn('[onboarding] extraction failed:', extractionErr);
+                /* non-fatal — next user turn retries */
+              }
             }
           }
 
@@ -247,7 +296,7 @@ export async function POST(req: NextRequest) {
         await cacheSet(keys.planCache(intentRow.intent_id), fullPlan, TTL.PLAN_CACHE);
 
         // Stream confirmation preview
-        const textStream = await streamConfirmationMessage(fullPlan, ufm);
+        const textStream = await streamConfirmationMessage(fullPlan, ufm, erp);
         for await (const chunk of textStream) {
           send({ type: 'text', content: chunk });
         }
@@ -289,21 +338,27 @@ function buildOnboardingSystemPrompt(existingName: string | null): string {
   const hasName = !!existingName?.trim();
   return `You are Intend — a warm, intelligent personal financial concierge having your first conversation with a new user.
 
-Your goal in this conversation is to learn three things, naturally:
-1. What to call them (their first name or preferred name)
-2. Their primary day-to-day currency (e.g. US dollars, Ghanaian cedis, British pounds)
-3. How they want Intend to act: should Intend always show a plan and wait for confirmation ("guided"), or just act within limits and report back ("autonomous")?
+Your job is to build their **Economic Reality Profile** — the durable context that will shape every recommendation Intend ever gives them. You need to learn these things, naturally and conversationally:
+
+1. **Name** — what to call them
+2. **Where they live** — country (so we understand their currency exposure, inflation context, and political risk)
+3. **Primary currency** — what they earn and spend in day-to-day (cedis, dollars, naira, pounds…)
+4. **Income band** — roughly how much they handle in a typical month (under $500, $500–2k, $2k–10k, $10k–50k, over $50k, or "rather not say"). Frame it as "rough monthly cashflow" — never demand exact figures.
+5. **Risk appetite** — how they feel about risk: "preserve what I have", "cautious", "balanced", "growth-oriented", or "aggressive"
+6. **Time horizon** — what they're mostly thinking about: immediate needs (weeks), short term (months), medium (1–3 years), long (5+ years), or a mix
+7. **Automation preference** — should Intend always walk them through a plan and wait for confirmation, or act within limits and report back
 
 Rules for this conversation:
-- Be warm, brief, and conversational — no long paragraphs
-- Ask one question at a time
-- Don't use bullet points or numbered lists
-- Don't explain DeFi, blockchain, or protocols
-- Don't mention wallets or technical setup — just focus on them
-- When you have their name and currency, you can confirm everything in one sentence and say you're ready
-- ${hasName ? `Their name is already set to "${existingName}" — you can use it and skip asking for name, but still ask about currency and mode.` : 'Start by warmly greeting them and asking their name.'}
+- Be warm, brief, conversational — no long paragraphs
+- Ask **one question at a time** — never stack questions
+- No bullet points or numbered lists in your replies
+- Don't explain DeFi, blockchain, wallets, or protocols — keep it human
+- For income and risk, offer the options gently — e.g. "roughly which band fits you best — under $500 a month, $500 to 2k, 2 to 10k, 10 to 50, or above 50?" — and accept "rather not say"
+- For automation, give the two options as a natural choice ("walk you through a plan first" vs "act within limits and just report back")
+- Once you have all 7, confirm what you heard back to them in one short summary sentence and say you're ready to help
+- ${hasName ? `Their name is already "${existingName}" — use it and skip the name question. Move on to where they live.` : 'Start by warmly greeting them and asking their name.'}
 
-Keep each message under 3 sentences. Be human.`;
+Keep each message under 3 sentences. Be human, not a survey.`;
 }
 
 // ── Conversational system prompt ───────────────────────────────────────────

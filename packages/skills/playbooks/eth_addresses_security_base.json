@@ -1,0 +1,16 @@
+{
+  "protocol": "eth_addresses_security",
+  "chain": "base",
+  "version": "1.0.0",
+  "contract": "0x0000000000000000000000000000000000000000",
+  "contract_from_arg": "asset",
+  "actions": {
+    "revoke_allowance": {
+      "function": "approve(address,uint256)",
+      "payload_args": [
+        { "name": "spender", "source": "from_address" },
+        { "name": "amount",  "value": "0" }
+      ]
+    }
+  }
+}

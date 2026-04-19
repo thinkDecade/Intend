@@ -7,6 +7,8 @@ import {
   updateProfile,
   updateLimits,
   updatePreferredChannel,
+  linkTelegram,
+  unlinkTelegram,
 } from '../actions';
 
 type ExecutionMode = 'autonomous' | 'semi_autonomous';
@@ -54,6 +56,48 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
 
   const [channel, setChannel]           = useState<Channel | ''>(initial.preferred_channel ?? '');
   const [channelStatus, setChannelStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // ── Telegram link state ──────────────────────────────────────────────────
+  const [tgLinked, setTgLinked]         = useState(initial.telegram_linked);
+  const [tgCode, setTgCode]             = useState('');
+  const [tgStatus, setTgStatus]         = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [tgError, setTgError]           = useState('');
+
+  function handleLinkTelegram(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTgError('');
+    setTgStatus('saving');
+    const fd = new FormData();
+    fd.set('link_code', tgCode.trim());
+    startTransition(async () => {
+      const r = await linkTelegram(fd);
+      if ('error' in r) {
+        setTgError(r.error);
+        setTgStatus('error');
+        setTimeout(() => setTgStatus('idle'), 3000);
+      } else {
+        setTgLinked(true);
+        setTgCode('');
+        flash(setTgStatus as never, true);
+      }
+    });
+  }
+
+  function handleUnlinkTelegram() {
+    if (!confirm('Disconnect Telegram from this Intend account?')) return;
+    setTgStatus('saving');
+    startTransition(async () => {
+      const r = await unlinkTelegram();
+      if ('error' in r) {
+        setTgError(r.error);
+        setTgStatus('error');
+        setTimeout(() => setTgStatus('idle'), 3000);
+      } else {
+        setTgLinked(false);
+        flash(setTgStatus as never, true);
+      }
+    });
+  }
 
   const [pending, startTransition] = useTransition();
 
@@ -292,10 +336,57 @@ export function SettingsForm({ initial }: { initial: SettingsInitial }) {
           <div className="settings-group-label">Channels</div>
 
           <div className="channel-grid">
-            <div className={`channel-card ${initial.telegram_linked ? 'connected' : ''}`}>
+            <div className={`channel-card ${tgLinked ? 'connected' : ''}`}>
               <div className="channel-card-icon">💬</div>
               <div className="channel-card-name">Telegram</div>
-              <div className="channel-card-state">{initial.telegram_linked ? 'Connected' : 'Not linked'}</div>
+              <div className="channel-card-state">{tgLinked ? 'Connected' : 'Not linked'}</div>
+
+              {!tgLinked && (
+                <form onSubmit={handleLinkTelegram} style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    placeholder="6-digit code"
+                    value={tgCode}
+                    onChange={(e) => setTgCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="login-input"
+                    style={{ textAlign: 'center', letterSpacing: 4, fontFamily: 'var(--font-mono, monospace)' }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={pending || tgCode.length !== 6}
+                    className="login-btn"
+                    style={{ padding: '6px 10px' }}
+                  >
+                    {tgStatus === 'saving' ? 'Linking…' : 'Link Telegram'}
+                  </button>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
+                    Run <code>/connect</code> in @intend_bot to get a code.
+                  </div>
+                </form>
+              )}
+
+              {tgLinked && (
+                <button
+                  type="button"
+                  onClick={handleUnlinkTelegram}
+                  disabled={pending}
+                  style={{
+                    marginTop: 10, fontSize: 12, color: 'var(--red)',
+                    background: 'transparent', border: '1px solid var(--red-dim)',
+                    borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                  }}
+                >
+                  {tgStatus === 'saving' ? 'Working…' : 'Disconnect'}
+                </button>
+              )}
+
+              <div style={{ minHeight: 16, marginTop: 4 }}>
+                {tgStatus === 'saved' && <span className="settings-status ok">Saved ✓</span>}
+                {tgError && <span className="settings-status err">{tgError}</span>}
+              </div>
             </div>
             <div className="channel-card connected">
               <div className="channel-card-icon">🌐</div>

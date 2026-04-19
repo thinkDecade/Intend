@@ -274,6 +274,104 @@ User speaks freely (any language, any phrasing)
 
 ---
 
+## v0.5_updated — Concierge Realization (Active)
+
+> Spec source: `v0.5_final/v0.5_spec_final.md` (2026-04-19)
+> Spec authority: where v0.5_updated and prior phases conflict, **the spec wins**.
+>
+> v0.5_updated reframes the product around four primitives (Store & Manage, Send / Spend, Convert, Allocate), an Economic Reality Profile that is **persisted** rather than computed at request time, fully conversational onboarding (no forms), and skill verification before execution.
+>
+> Existing PROTECT/GROW/SAVE/EARN/INVEST primitive code stays in place — out of v0.5 user-facing scope but not deleted.
+
+### Phase 9 — Economic Reality Profile (ERP) ✅
+
+Goal: persist the seven ERP dimensions to Postgres, expose a repository, retrieve at session start, and inject into the system prompt.
+
+- [x] Migration `005_economic_reality_profile.sql` — `economic_reality_profile` table:
+  `user_id` PK, `location_country`, `location_region`, `local_currency`, `currency_risk` (enum: low|moderate|elevated|high|severe), `inflation_context_pct` (numeric), `political_risk` (enum), `income_range` (enum), `risk_tolerance` (enum), `time_horizon` (enum), `last_seeded_at`, `last_enriched_at`, `seed_source` (enum: onboarding|inference|manual|backfill)
+- [x] Enable `pgvector` extension; add `erp_embedding` vector(1536) column for semantic memory hooks (future)
+- [x] RLS policies — user can read own row only; service role full access
+- [x] `packages/data/src/repositories/erp.ts` — `getERP`, `upsertERP`, `seedERPFromOnboarding`, `markERPEnriched`, `deleteERP`
+- [x] `packages/intelligence/src/erp-loader.ts` — fetches ERP at session start, derives default from country/currency on first call and persists
+- [x] `buildSystemPrompt()` updated — ERP block injected ahead of UFM JSON
+- [x] Backfill migration `005a_backfill_erp_from_users.sql` — seeds existing users from `users.region` + `local_currency`
+- [x] Wired into bot pipeline (`apps/bot/src/pipeline.ts`) and web chat route (`apps/web/src/app/api/chat/route.ts`) — `loadERP` runs alongside `buildUFM`, threaded through `interpretIntent` + confirmation generation
+- [x] All packages + apps build clean
+- [x] DOCUMENTATION.md updated (§3 monorepo tree, §15 migrations + tables)
+
+### Phase 10 — Conversational Onboarding ✅
+
+Goal: replace the current 6-step wizard with an agent-driven chat onboarding that seeds the ERP as it talks.
+
+- [x] Removed Profile / Account / Fund / FirstIntent / Channels wizard steps from `apps/web/src/app/onboard/onboard-flow.tsx`
+- [x] Replaced with single chat surface (`OnboardFlow`) — two columns: chat stream + side reveal card
+- [x] `packages/intelligence/src/onboarding-agent.ts` — `runOnboardingTurn` state machine: greeting → location → income → risk → wallet → intent → done. Each turn uses `generateObject` with a per-state Zod schema and returns `{ message, extracted, next_state, reveal_wallet?, finished? }`
+- [x] `apps/web/src/app/onboard/actions.ts` — `onboardingTurn` server action persists extracted ERP slots via `seedERPFromOnboarding` incrementally and mirrors region/currency into `users` for backwards compat
+- [x] CDP wallet provisioned silently the moment `location_country` is extracted (fire-and-forget) — no UI break
+- [x] Wallet reveal moment: side card slides from "setting up" progress list to live wallet address with custody copy after the `risk` turn
+- [x] Onramp/USDC deposit nudge rendered in side card after wallet reveal
+- [x] First-intent capture: when the user types their first intention in the `wallet`/`intent` state, it's saved to `sessionStorage['intend:first_intent']` (existing ChatPanel pickup) before redirect to `/app`
+- [x] Passkey nudge slot reserved (Phase 13)
+- [x] Onboarding-specific CSS appended to `apps/web/src/app/globals.css` (.ob-chat-* / .ob-bubble / .ob-side-card / mobile breakpoint at 880px)
+- [x] All packages + apps build clean
+- [x] DOCUMENTATION.md updated
+
+### Phase 11 — Skill Verification Pipeline ✅
+
+Goal: every skill loaded from `packages/skills/playbooks/` is checksum-verified and sandboxed before execution. Three external skills installed.
+
+- [x] `packages/skills/src/loader.ts` — load playbook → verify SHA-256 against pinned manifest → reject on mismatch (`SkillVerificationError` reasons: `unpinned | mismatch | missing_manifest`)
+- [x] `packages/skills/manifest.json` — pinned `{ skill, chain, version, sha256, source_repo, commit, external? }` for all 9 playbooks
+- [x] CLI: `yarn workspace @intend/skills skills:verify` (`scripts/verify.mjs`) re-hashes all playbooks, fails on drift / unpinned / extras. Companion `skills:hash` regenerates the manifest.
+- [x] Three v0.5-required external skills installed as pinned JSON playbooks:
+  - `eth_wallets_base.json` (Austin Griffith — WETH9 wrap/unwrap on Base)
+  - `bankrbot_usdc_base.json` (BankrBot core — USDC transfer/approve)
+  - `eth_addresses_security_base.json` (Austin Griffith — `revoke_allowance`)
+- [x] Sandbox boundary documented inline in `registry.ts`: pure encoder, no fs/network outside pinned playbook reads, no key access, no DB.
+- [x] Skill execution audit: every `buildTransaction` writes `event_log` row `event_type='skill_invoked'` with `{ skill, chain, action, network, version, sha256, external, args_hash, tx_count }` — fire-and-forget, never blocks tx (wired in `packages/execution/src/action-dispatcher.ts`).
+- [x] Audit hook contract `setSkillAuditHook` exposed for non-execution callers (keeps `@intend/skills` free of `@intend/data` dep).
+- [x] Local-dev escape hatch `INTEND_SKILLS_SKIP_VERIFY=1` — explicitly forbidden in `NODE_ENV=production`.
+- [x] Update DOCUMENTATION.md
+
+### Phase 12 — Telegram Parity Verification ✅
+
+Goal: the same ERP, the same primitives, the same memory across Web ↔ Telegram. Confirm the v0.5_updated spec's "unified session" promise.
+
+- [x] Telegram pipeline pulls ERP at message ingress (`apps/bot/src/pipeline.ts:141` — `loadERP(userId)` runs in parallel with balances/positions/goals/pending; failure is non-fatal so the agent still has UFM grounding)
+- [x] `/connect` flow consumer on web:
+  - `linkTelegram(formData)` server action (`apps/web/src/app/app/actions.ts`) — reads `intend:link_code:{code}` from Redis, validates, sets `users.telegram_id`, deletes the code, logs `channel_linked`
+  - `unlinkTelegram()` companion action for symmetry
+  - Settings UI (`apps/web/src/app/app/settings/settings-form.tsx`) — 6-digit input on the Telegram channel card, Disconnect button when linked, inline status + error feedback
+- [x] `updateUserSettings` extended (`packages/data/src/repositories/users.ts`) to accept `telegram_id` (BIGINT serialized as string for Postgres) and `whatsapp_id`
+- [x] Cross-channel session handoff verified by design:
+  - Both channels resolve to the SAME `user_id` once linked → all per-user state (ERP, UFM positions/goals/intents, event_log) is unified
+  - Telegram `saveSession` writes both Redis (fast, channel-keyed) AND `sessions` table (durable, channel-keyed) — survives Redis eviction and supports forensic replay
+  - Conversation history is intentionally per-channel; durable financial state is per-user
+- [x] Smoke test: `tests/cross-channel.e2e.ts` — seeds a user, writes ERP via web path, asserts Telegram `loadERP()` reads the same row, simulates `/connect` link code consumption, verifies `getUserByTelegramId` resolves to the web `user_id`, persists a Telegram session row and reads it back. Runs against live Supabase + Upstash; cleans up its own fixtures.
+- [x] All packages build clean (`@intend/data`, `@intend/web`, `@intend/bot`)
+- [x] Update DOCUMENTATION.md
+
+### Phase 13 — Passkey Auth ✅
+
+Goal: WebAuthn as second auth path at signup. Email OTP remains; user picks at signup.
+
+- [x] SimpleWebAuthn wired into `apps/web/src/app/api/auth/passkey/{register,login}/{options,verify}` plus `/list`
+- [x] Migration `006_passkey_credentials.sql` — `passkey_credentials` + `passkey_challenges` tables linked to `users`, RLS enabled
+- [x] Login page: equal-prominence buttons, no "recommended" hierarchy (passkey + OTP separated by an "or" divider)
+- [x] Onboarding completion triggers passkey nudge for OTP users (`PasskeyNudge` on `/app`, dismissible 7d). First-deposit hook reserved as Phase-2 surface via `data-passkey-nudge` flag.
+- [x] Update DOCUMENTATION.md
+
+### Phase 14 — Doc + Handover Refresh ✅
+
+- [x] `CLAUDE.md` — note v0.5_updated spec path, four-active-primitives framing, wipe-script operational note
+- [x] `DOCUMENTATION.md` — ERP schema (Phase 9), onboarding agent (Phase 10), skill verification (Phase 11), passkey flow (Phase 13)
+- [x] `HANDOVER.md` — Phases 9–14 recap surfaced at top; Phase-8 history preserved
+- [x] `tasks/done.md` entries for Phases 9–14
+- [x] `apps/CLAUDE.md` — onboarding chat, ERP repository surface, passkey routes/components, Telegram link/unlink actions
+- [x] `scripts/wipe-users.{sql,ts}` — environment reset for demo runs (auth + Redis + truncate)
+
+---
+
 ## Deferred to Post-v0.5
 
 - SEND fiat rails (Flutterwave for NGN/GHS, Wise for GBP/CNY/other) — depends on funding
