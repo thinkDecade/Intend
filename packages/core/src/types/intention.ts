@@ -1,9 +1,19 @@
 import { z } from 'zod';
 
+// v0.5_updated primitives.
+// Active in v0.5:        STORE (Store & Manage), SEND (Send/Spend merged).
+// Follow-up (gated):     CONVERT (v0.6), ALLOCATE (v0.7).
+// Legacy (deprecated):   PROTECT, MOVE, SPEND, GROW, SAVE, EARN, INVEST.
+//
+// Legacy values stay in the enum so existing rows in `intents` keep
+// validating, but the interpreter no longer emits them and the strategy
+// router rejects them with PrimitiveDisabledError. They will be removed
+// after a one-cycle deprecation pass.
 export const IntentionSchema = z.object({
   primitive: z.enum([
-    'PROTECT', 'GROW', 'INVEST', 'SAVE',
-    'MOVE', 'SPEND', 'EARN', 'CONVERT',
+    'STORE', 'SEND', 'CONVERT', 'ALLOCATE',
+    // legacy — interpreter does not emit, router rejects
+    'PROTECT', 'GROW', 'INVEST', 'SAVE', 'MOVE', 'SPEND', 'EARN',
   ]),
   intent_confidence:   z.number().min(0).max(1),
   parameters: z.object({
@@ -33,7 +43,9 @@ export type Channel = 'telegram' | 'whatsapp' | 'web';
  * autonomous:    Intent in, outcome out. Executes immediately, sends receipt after.
  * semi_autonomous: Shows plan, waits for one explicit confirmation before executing.
  *
- * PROTECT is always semi_autonomous regardless of user setting — hardcoded in permission-gate.
+ * v0.5_updated default: 'semi_autonomous' (Assisted mode) — every transaction
+ * shows a plan and waits for explicit confirmation. Autonomous mode is gated
+ * to v0.5.9 per the spec roadmap.
  */
 export type ExecutionMode = 'autonomous' | 'semi_autonomous';
 

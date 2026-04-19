@@ -134,8 +134,13 @@ export async function POST(req: NextRequest) {
         const interpretation = await interpretIntent(message, ufm, erp);
         const { intention, needs_clarification, clarification_question } = interpretation;
 
+        // STORE is read-only in v0.5 — no plan, just conversation. Route it
+        // through the streaming chat branch so the agent can show balance,
+        // wallet address, deposit instructions, etc.
         const isHighConfidenceFinancial =
-          intention.intent_confidence >= 0.75 && !needs_clarification;
+          intention.intent_confidence >= 0.75
+          && !needs_clarification
+          && intention.primitive !== 'STORE';
 
         // 3a. LOW confidence / conversational / onboarding → streaming chat
         if (!isHighConfidenceFinancial || isOnboarding) {
@@ -178,6 +183,11 @@ export async function POST(req: NextRequest) {
                   .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
                   .join('\n');
 
+                // v0.5_updated: onboarding only captures the three fields the
+                // spec calls for — name, location, currency. Inflation, currency
+                // risk, and political signals are derived from `location_country`
+                // by the enrichment job; risk tolerance / time horizon / income
+                // band / automation mode are no longer asked up-front.
                 const { object: profile } = await generateObject({
                   model: getModel('primary'),
                   schema: z.object({
@@ -187,69 +197,69 @@ export async function POST(req: NextRequest) {
                       .describe('ISO 3166-1 alpha-2 country code inferred from what the user said (e.g. "GH", "US", "NG"). null if unclear.'),
                     local_currency:   z.string().nullable()
                       .describe('3-letter ISO 4217 currency code (e.g. "GHS", "USD", "NGN"). null if unclear.'),
-                    income_range: z.enum(['under_500_month','500_2k_month','2k_10k_month','10k_50k_month','over_50k_month','undisclosed'])
-                      .nullable()
-                      .describe('Best-fit income band the user described, or "undisclosed" if they declined. null if not yet asked/answered.'),
-                    risk_tolerance: z.enum(['preservation','cautious','balanced','growth','aggressive'])
-                      .nullable()
-                      .describe('The user\'s self-described attitude to risk. null if not yet clear.'),
-                    time_horizon: z.enum(['immediate','short','medium','long','mixed'])
-                      .nullable()
-                      .describe('Primary planning horizon: immediate=weeks, short=months, medium=1-3y, long=5y+, mixed=multiple. null if not yet clear.'),
-                    execution_mode: z.enum(['autonomous','semi_autonomous']).nullable()
-                      .describe('autonomous = act within limits & report back; semi_autonomous = confirm every plan first. null if not yet clear.'),
                     profile_complete: z.boolean()
-                      .describe('true only when display_name, location_country, local_currency, income_range, risk_tolerance, time_horizon, and execution_mode are ALL known.'),
+                      .describe('true only when display_name, location_country, AND local_currency are all known.'),
                   }),
-                  prompt: `Extract the user's Economic Reality Profile from this onboarding conversation.\nReturn null for any field that hasn't been clearly stated.\nFor income, "rather not say" or any decline maps to "undisclosed".\n\n${transcript}`,
+                  prompt: `Extract the user's onboarding profile from this conversation.\nReturn null for any field that hasn't been clearly stated.\n\n${transcript}`,
                 });
 
                 // Stream partial state so the client can render progress if it wants.
                 send({ type: 'onboarding_data', profile });
 
+                // ── Inline wallet provisioning (spec step 5) ─────────────────
+                //   The moment we have enough to identify the user (name +
+                //   country + currency), spin up their CDP wallet silently in
+                //   the background. The next assistant turn will surface a
+                //   celebratory "your wallet is ready" message. We use the
+                //   `wallet_provisioned` event flag to fire this exactly once.
                 if (
-                  profile.profile_complete &&
                   profile.display_name &&
                   profile.location_country &&
-                  profile.local_currency &&
-                  profile.income_range &&
-                  profile.risk_tolerance &&
-                  profile.time_horizon
+                  profile.local_currency
                 ) {
-                  // 1. users row — name + currency + automation mode
+                  // 1. Persist the three captured fields immediately so subsequent
+                  //    chat turns see them in the UFM/ERP.
                   await updateUserSettings(userId, {
                     display_name:   profile.display_name,
                     local_currency: profile.local_currency,
                     region:         profile.location_country,
-                    ...(profile.execution_mode ? { execution_mode: profile.execution_mode } : {}),
                   });
-
-                  // 2. ERP row — full economic context, seed_source = 'onboarding'
-                  //    We leave currency_risk / political_risk / inflation_context_pct
-                  //    on the migration defaults; the enrichment job refines them later
-                  //    from country-level signals.
                   await seedERPFromOnboarding(userId, {
                     location_country: profile.location_country,
                     local_currency:   profile.local_currency,
-                    income_range:     profile.income_range,
-                    risk_tolerance:   profile.risk_tolerance,
-                    time_horizon:     profile.time_horizon,
                   });
 
-                  // 3. Flip the flag last — if anything above throws, the next chat
-                  //    turn will retry the extraction rather than landing the user
-                  //    in /app with a half-filled ERP.
-                  await markOnboardingComplete(userId);
-
-                  // 4. Provision wallet (non-fatal)
+                  // 2. Provision wallet (idempotent; non-fatal). On first success
+                  //    emit a `wallet_ready` event the client surfaces as a
+                  //    celebratory message in the next turn.
                   try {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const execution = await import('@intend/execution' as any);
                     const NETWORK = process.env['NODE_ENV'] === 'production' ? 'base' : 'base-sepolia';
-                    await (execution as { getOrCreateWallet: (id: string, net: string) => Promise<unknown> }).getOrCreateWallet(userId, NETWORK);
-                  } catch { /* non-fatal */ }
+                    const wallet = await (execution as {
+                      getOrCreateWallet: (id: string, net: string) => Promise<{ info: { address: string } }>
+                    }).getOrCreateWallet(userId, NETWORK);
+                    const address = wallet.info.address;
+                    send({ type: 'wallet_ready', address });
+                    // Celebratory inline note appended to the same assistant
+                    // bubble — shows the address in full and tells them what
+                    // they can do now. Spec step 5.
+                    send({
+                      type: 'text',
+                      content:
+                        `\n\n🎉 Your wallet is ready.\n\nAddress: ${address}\n\n` +
+                        `You can now hold funds here and send to anyone — just tell me what you'd like to do.`,
+                    });
+                  } catch (walletErr) {
+                    console.warn('[onboarding] wallet provisioning failed:', walletErr);
+                    /* non-fatal — next turn will retry */
+                  }
 
-                  send({ type: 'onboarding_complete' });
+                  // 3. Flip the onboarding flag once everything above has landed.
+                  if (profile.profile_complete) {
+                    await markOnboardingComplete(userId);
+                    send({ type: 'onboarding_complete' });
+                  }
                 }
               } catch (extractionErr) {
                 console.warn('[onboarding] extraction failed:', extractionErr);
@@ -263,27 +273,18 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        // 3b. HIGH confidence financial intent → generate plan
+        // 3b. HIGH confidence financial intent → generate plan.
+        //     v0.5_updated: only SEND reaches this branch with a real plan.
+        //     CONVERT/ALLOCATE (and any straggler legacy primitives) hit the
+        //     PrimitiveDisabledError below and surface a precise message.
         const recipientRaw  = intention.parameters.recipient_raw ?? '';
         const resolvedAddress = isEvmAddress(recipientRaw) ? recipientRaw : '';
         const amountRaw     = intention.parameters.amount ?? 0;
         const amountUsd     = amountRaw === 'all' ? ufm.present.total_usd_value : amountRaw;
 
-        let goalId: string | undefined;
-        if (intention.primitive === 'SAVE') {
-          const goalName = intention.parameters.goal_name;
-          const matched  = goalName
-            ? ufm.present.active_goals.find(g => g.name.toLowerCase() === goalName.toLowerCase())
-            : ufm.present.active_goals[0];
-          goalId = matched?.id;
-        }
-
         const stratCtx = {
           network:        (process.env['NODE_ENV'] === 'production' ? 'mainnet' : 'testnet') as 'mainnet' | 'testnet',
           recipientType:  'claim' as const,
-          ...(goalId ? { goalId } : {}),
-          inboundAsset:   intention.parameters.asset_from ?? 'USDC',
-          inboundAmount:  typeof intention.parameters.amount === 'number' ? intention.parameters.amount : 0,
           resolvedAddress,
           isNewRecipient: resolvedAddress !== '',
         };
@@ -338,24 +339,20 @@ function buildOnboardingSystemPrompt(existingName: string | null): string {
   const hasName = !!existingName?.trim();
   return `You are Intend — a warm, intelligent personal financial concierge having your first conversation with a new user.
 
-Your job is to build their **Economic Reality Profile** — the durable context that will shape every recommendation Intend ever gives them. You need to learn these things, naturally and conversationally:
+This first chat is short by design. You only need three things, gathered naturally in conversation:
 
 1. **Name** — what to call them
-2. **Where they live** — country (so we understand their currency exposure, inflation context, and political risk)
-3. **Primary currency** — what they earn and spend in day-to-day (cedis, dollars, naira, pounds…)
-4. **Income band** — roughly how much they handle in a typical month (under $500, $500–2k, $2k–10k, $10k–50k, over $50k, or "rather not say"). Frame it as "rough monthly cashflow" — never demand exact figures.
-5. **Risk appetite** — how they feel about risk: "preserve what I have", "cautious", "balanced", "growth-oriented", or "aggressive"
-6. **Time horizon** — what they're mostly thinking about: immediate needs (weeks), short term (months), medium (1–3 years), long (5+ years), or a mix
-7. **Automation preference** — should Intend always walk them through a plan and wait for confirmation, or act within limits and report back
+2. **Where they live** — country (so Intend understands their currency exposure, inflation context, and political signals automatically — DO NOT ask about inflation, risk tolerance, time horizon, or income)
+3. **Primary currency** — what they earn and spend day-to-day (cedis, dollars, naira, pounds…)
 
 Rules for this conversation:
-- Be warm, brief, conversational — no long paragraphs
+- Be warm, brief, conversational — short messages, no long paragraphs
 - Ask **one question at a time** — never stack questions
 - No bullet points or numbered lists in your replies
-- Don't explain DeFi, blockchain, wallets, or protocols — keep it human
-- For income and risk, offer the options gently — e.g. "roughly which band fits you best — under $500 a month, $500 to 2k, 2 to 10k, 10 to 50, or above 50?" — and accept "rather not say"
-- For automation, give the two options as a natural choice ("walk you through a plan first" vs "act within limits and just report back")
-- Once you have all 7, confirm what you heard back to them in one short summary sentence and say you're ready to help
+- Never mention "DeFi", "blockchain", "wallet", "chain", "protocol", or any infrastructure word
+- Never ask about risk appetite, time horizon, income band, or automation preferences — those are derived later or asked only when relevant to a specific intention
+- Once you have all three, confirm what you heard in one short sentence
+- After confirmation, the system will silently provision their wallet. When you receive a system note that the wallet is ready, congratulate them warmly in one short message, share the address (full, never truncated), and tell them they can now hold funds and send to anyone — don't list other capabilities
 - ${hasName ? `Their name is already "${existingName}" — use it and skip the name question. Move on to where they live.` : 'Start by warmly greeting them and asking their name.'}
 
 Keep each message under 3 sentences. Be human, not a survey.`;
@@ -396,23 +393,22 @@ The user's name is ${name}.
 ${walletSection}
 ${balanceSection}
 
-Your capabilities:
-- Store funds safely on the user's behalf — Intend holds assets and acts on them when the user intends something (this is the default state for deposited funds)
-- Protect money from inflation and currency risk
-- Grow idle capital (yield generation)
-- Move money to anyone, anywhere
-- Convert between currencies at best rates
-- Save toward named goals
-- Earn on incoming funds
-- Invest in assets the user believes in
-- Spend via any payment rail
+What you can actually do for them right now (v0.5):
+- **Hold and show their balance** — receive funds, show wallet address, report what they have
+- **Send funds to anyone** — to a person or to pay for something, in one motion. The destination is just an address.
+
+Coming soon (do NOT offer these — if asked, say honestly "that's coming in the next version"):
+- Converting between currencies at best rates
+- Allocating funds to grow, save toward a goal, or earn yield
 
 Important rules you never break:
 1. Never name protocols, chains, or DeFi infrastructure to the user — speak in outcomes only
-2. Never guarantee returns — use "historically", "typically", "expected to"
-3. Never give direct financial advice — present facts and options
-4. Never reveal technical implementation details
-5. When sharing a wallet address, always show the full address — never truncate
+2. Never reference primitives by name (no "PROTECT", "MOVE", "SPEND", "GROW", "EARN", "INVEST" — those words don't exist for the user)
+3. Never offer a capability that isn't in the active list above. If they ask for one, name it plainly and say it's coming in the next version
+4. Never guarantee returns — use "historically", "typically", "expected to"
+5. Never give direct financial advice — present facts and options
+6. Never reveal technical implementation details
+7. When sharing a wallet address, always show the full address — never truncate
 
 Your voice:
 - Warm but not effusive. Confident. Direct.
