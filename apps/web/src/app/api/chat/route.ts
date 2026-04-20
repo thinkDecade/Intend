@@ -103,25 +103,31 @@ export async function POST(req: NextRequest) {
           }),
         ]);
 
-        // Self-heal: if onboarding is done but no wallet row exists (an earlier
-        // provisioning attempt failed silently, or DB write was rolled back),
-        // provision on-demand here. Idempotent — getOrCreateWallet returns the
-        // existing row if it's there. This guarantees the conversational agent
-        // always has a real address to share, never the misleading "your wallet
-        // will be created on first transaction" fallback.
+        // Self-heal: if onboarding is done but no wallet row exists, provision
+        // on-demand here. Idempotent — getOrCreateWallet returns the existing
+        // row if it's there.
+        //
+        // BUT: this is bounded by a hard 4s timeout. If the CDP API is slow
+        // we'd rather respond with the empty-wallet fallback than blow past
+        // the serverless function timeout (which produces an HTTP 504 and a
+        // dead chat for the user). The next turn will retry.
         let walletRow = walletRowInitial;
+        let walletProvisionFailed = false;
         if (!walletRow && !isOnboarding) {
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const execution = await import('@intend/execution' as any);
-            const wallet = await (execution as {
-              getOrCreateWallet: (id: string, net: string) => Promise<{ info: { address: string; wallet_id: string } }>
-            }).getOrCreateWallet(userId, NETWORK);
+            const NETWORK_TS = NETWORK as string;
+            const wallet = await Promise.race([
+              (execution as {
+                getOrCreateWallet: (id: string, net: string) => Promise<{ info: { address: string; wallet_id: string } }>
+              }).getOrCreateWallet(userId, NETWORK_TS),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('wallet provisioning timed out after 4s')), 4000),
+              ),
+            ]);
             walletRow = await getUserPrimaryWallet(userId, CHAIN as 'base' | 'base_sepolia').catch(() => null);
             if (!walletRow) {
-              // Synthesise a minimal row from the just-created wallet so the
-              // current turn can still surface the address even if the read
-              // back lost a race with replication.
               walletRow = {
                 wallet_id:  wallet.info.wallet_id,
                 user_id:    userId,
@@ -133,6 +139,7 @@ export async function POST(req: NextRequest) {
               };
             }
           } catch (err) {
+            walletProvisionFailed = true;
             console.warn('[chat] on-demand wallet provisioning failed:', err);
           }
         }
@@ -186,7 +193,14 @@ export async function POST(req: NextRequest) {
 
           const systemPrompt = isOnboarding
             ? buildOnboardingSystemPrompt(dbUser.display_name)
-            : buildConversationalSystemPrompt(ufm, dbUser.display_name, walletRow?.address ?? null, cachedBalances);
+            : buildConversationalSystemPrompt(
+                ufm,
+                dbUser.display_name,
+                walletRow?.address ?? null,
+                cachedBalances,
+                walletProvisionFailed,
+                message,
+              );
 
           // Clarification only makes sense when the user is clearly attempting
           // a financial action but the parameters are ambiguous. For greetings,
@@ -214,99 +228,25 @@ export async function POST(req: NextRequest) {
             send({ type: 'text', content: chunk });
           }
 
-          // Onboarding extraction — after 2+ user messages, try to extract profile data.
-          // We extract incrementally so the UI can reflect partial state, and we only
-          // commit + complete once every required ERP field is filled.
+          // Onboarding extraction — after 2+ user messages, kick off profile
+          // extraction + wallet provisioning IN THE BACKGROUND. Both are slow
+          // (LLM call + CDP API) and were previously serialised inside the SSE
+          // response, blowing past the serverless function timeout (HTTP 504).
+          // We close the stream as soon as the conversational reply finishes;
+          // the celebratory wallet message lands on the user's NEXT turn via
+          // the on-demand wallet provisioning self-heal earlier in this route.
           if (isOnboarding) {
             const userTurns = allMessages.filter(m => m.role === 'user').length;
             if (userTurns >= 2) {
-              try {
-                const transcript = allMessages
-                  .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-                  .join('\n');
-
-                // v0.5_updated: onboarding only captures the three fields the
-                // spec calls for — name, location, currency. Inflation, currency
-                // risk, and political signals are derived from `location_country`
-                // by the enrichment job; risk tolerance / time horizon / income
-                // band / automation mode are no longer asked up-front.
-                const { object: profile } = await generateObject({
-                  model: getModel('primary'),
-                  schema: z.object({
-                    display_name:     z.string().nullable()
-                      .describe("The user's first name or preferred name, null if not yet given"),
-                    location_country: z.string().nullable()
-                      .describe('ISO 3166-1 alpha-2 country code inferred from what the user said (e.g. "GH", "US", "NG"). null if unclear.'),
-                    local_currency:   z.string().nullable()
-                      .describe('3-letter ISO 4217 currency code (e.g. "GHS", "USD", "NGN"). null if unclear.'),
-                    profile_complete: z.boolean()
-                      .describe('true only when display_name, location_country, AND local_currency are all known.'),
-                  }),
-                  prompt: `Extract the user's onboarding profile from this conversation.\nReturn null for any field that hasn't been clearly stated.\n\n${transcript}`,
-                });
-
-                // Stream partial state so the client can render progress if it wants.
-                send({ type: 'onboarding_data', profile });
-
-                // ── Inline wallet provisioning (spec step 5) ─────────────────
-                //   The moment we have enough to identify the user (name +
-                //   country + currency), spin up their CDP wallet silently in
-                //   the background. The next assistant turn will surface a
-                //   celebratory "your wallet is ready" message. We use the
-                //   `wallet_provisioned` event flag to fire this exactly once.
-                if (
-                  profile.display_name &&
-                  profile.location_country &&
-                  profile.local_currency
-                ) {
-                  // 1. Persist the three captured fields immediately so subsequent
-                  //    chat turns see them in the UFM/ERP.
-                  await updateUserSettings(userId, {
-                    display_name:   profile.display_name,
-                    local_currency: profile.local_currency,
-                    region:         profile.location_country,
-                  });
-                  await seedERPFromOnboarding(userId, {
-                    location_country: profile.location_country,
-                    local_currency:   profile.local_currency,
-                  });
-
-                  // 2. Provision wallet (idempotent; non-fatal). On first success
-                  //    emit a `wallet_ready` event the client surfaces as a
-                  //    celebratory message in the next turn.
-                  try {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const execution = await import('@intend/execution' as any);
-                    const NETWORK = process.env['NODE_ENV'] === 'production' ? 'base' : 'base-sepolia';
-                    const wallet = await (execution as {
-                      getOrCreateWallet: (id: string, net: string) => Promise<{ info: { address: string } }>
-                    }).getOrCreateWallet(userId, NETWORK);
-                    const address = wallet.info.address;
-                    send({ type: 'wallet_ready', address });
-                    // Celebratory inline note appended to the same assistant
-                    // bubble — shows the address in full and tells them what
-                    // they can do now. Spec step 5.
-                    send({
-                      type: 'text',
-                      content:
-                        `\n\n🎉 Your wallet is ready.\n\nAddress: ${address}\n\n` +
-                        `You can now hold funds here and send to anyone — just tell me what you'd like to do.`,
-                    });
-                  } catch (walletErr) {
-                    console.warn('[onboarding] wallet provisioning failed:', walletErr);
-                    /* non-fatal — next turn will retry */
-                  }
-
-                  // 3. Flip the onboarding flag once everything above has landed.
-                  if (profile.profile_complete) {
-                    await markOnboardingComplete(userId);
-                    send({ type: 'onboarding_complete' });
-                  }
-                }
-              } catch (extractionErr) {
-                console.warn('[onboarding] extraction failed:', extractionErr);
-                /* non-fatal — next user turn retries */
-              }
+              const transcript = allMessages
+                .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+                .join('\n');
+              // Fire-and-forget. We must NOT await this — the SSE response
+              // would otherwise stay open until both the extraction LLM and
+              // the CDP API resolve, which routinely exceeds 10s.
+              void runOnboardingExtraction(userId, transcript).catch(err => {
+                console.warn('[onboarding] background extraction failed:', err);
+              });
             }
           }
 
@@ -375,6 +315,64 @@ export async function POST(req: NextRequest) {
   });
 }
 
+// ── Background onboarding extraction + wallet provisioning ────────────────
+//
+// Runs detached from the SSE response so the user's reply isn't blocked on
+// the LLM extraction call or the CDP API. State the next chat turn cares
+// about (display_name, region, ERP, wallet row) is persisted to Supabase,
+// so the on-demand wallet self-heal at the top of POST() picks it up
+// transparently.
+
+async function runOnboardingExtraction(userId: string, transcript: string): Promise<void> {
+  const { object: profile } = await generateObject({
+    model: getModel('primary'),
+    schema: z.object({
+      display_name:     z.string().nullable()
+        .describe("The user's first name or preferred name, null if not yet given"),
+      location_country: z.string().nullable()
+        .describe('ISO 3166-1 alpha-2 country code inferred from what the user said (e.g. "GH", "US", "NG"). null if unclear.'),
+      local_currency:   z.string().nullable()
+        .describe('3-letter ISO 4217 currency code (e.g. "GHS", "USD", "NGN"). null if unclear.'),
+      profile_complete: z.boolean()
+        .describe('true only when display_name, location_country, AND local_currency are all known.'),
+    }),
+    prompt: `Extract the user's onboarding profile from this conversation.\nReturn null for any field that hasn't been clearly stated.\n\n${transcript}`,
+  });
+
+  if (!profile.display_name || !profile.location_country || !profile.local_currency) {
+    return; // not enough yet — the next turn will retry
+  }
+
+  // Persist captured fields. updateUserSettings + seedERPFromOnboarding are
+  // both idempotent so running this on every qualifying turn is safe.
+  await updateUserSettings(userId, {
+    display_name:   profile.display_name,
+    local_currency: profile.local_currency,
+    region:         profile.location_country,
+  });
+  await seedERPFromOnboarding(userId, {
+    location_country: profile.location_country,
+    local_currency:   profile.local_currency,
+  });
+
+  // Provision wallet (idempotent — getOrCreateWallet returns the existing row).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const execution = await import('@intend/execution' as any);
+    const NETWORK = process.env['NODE_ENV'] === 'production' ? 'base' : 'base-sepolia';
+    await (execution as {
+      getOrCreateWallet: (id: string, net: string) => Promise<{ info: { address: string } }>
+    }).getOrCreateWallet(userId, NETWORK);
+  } catch (walletErr) {
+    console.warn('[onboarding] wallet provisioning failed:', walletErr);
+    // Non-fatal — the on-demand provisioning in the main POST handler will retry.
+  }
+
+  if (profile.profile_complete) {
+    await markOnboardingComplete(userId);
+  }
+}
+
 // ── Onboarding system prompt ───────────────────────────────────────────────
 
 function buildOnboardingSystemPrompt(existingName: string | null): string {
@@ -407,18 +405,34 @@ function buildConversationalSystemPrompt(
   displayName: string | null,
   walletAddress: string | null,
   balances: Balance[],
+  walletProvisionFailed: boolean = false,
+  currentUserMessage: string = '',
 ): string {
   const name = displayName ?? 'there';
+  const userAskedAboutWallet = /\b(wallet|address|deposit|receive|fund|0x[0-9a-fA-F]+)\b/i.test(currentUserMessage);
 
-  // Wallet section — only shown when an address exists
-  const walletSection = walletAddress
-    ? `
+  // Wallet section — content depends on (a) whether we have an address,
+  // (b) whether provisioning just failed, and (c) whether the user's CURRENT
+  // message is even about the wallet. The agent must NEVER volunteer a
+  // wallet error on a greeting like "hi" — that was the previous failure
+  // mode where prior buggy assistant turns kept echoing forward.
+  let walletSection: string;
+  if (walletAddress) {
+    walletSection = `
 The user's wallet address is: ${walletAddress}
 When asked for it, share the address directly and completely — never truncate, never say "let me check", never say it's being created.
 To receive funds, they send USDC to that address on Base. Do NOT name the chain unless they explicitly ask about technicals.
-Fiat deposits (card / bank) are not yet available — if asked, say it's coming in the next version, and meanwhile they can fund the wallet by sending USDC to the address above from any other crypto wallet or exchange.`
-    : `
-There is no wallet on file for this user right now — provisioning likely failed. If they ask about their wallet, be honest: "I'm having trouble loading your wallet right now — try refreshing, and if it persists please report it." Do NOT invent a future creation timeline.`;
+Fiat deposits (card / bank) are not yet available — if asked, say it's coming in the next version, and meanwhile they can fund the wallet by sending USDC to the address above from any other crypto wallet or exchange.`;
+  } else if (walletProvisionFailed && userAskedAboutWallet) {
+    walletSection = `
+The user's wallet could not be loaded on this turn (the wallet service is temporarily slow). Since they are asking about their wallet, say honestly: "Your wallet couldn't load just now — try sending another message in a moment. If it keeps failing please report it." Do NOT invent a creation timeline. Do NOT say "create one manually". Do NOT promise to flag it to the team — just ask them to try again.`;
+  } else if (walletProvisionFailed) {
+    walletSection = `
+The user has a wallet but it's temporarily slow to load. They have NOT asked about it on this turn, so DO NOT mention any wallet issue — just answer whatever they actually asked. Never volunteer trouble that the user didn't bring up.`;
+  } else {
+    walletSection = `
+The user does not have a wallet provisioned yet. They have NOT asked about it on this turn, so DO NOT mention wallets at all unless their next message specifically requests it. If they later ask, say: "Your wallet will be set up automatically — send me what you'd like to do and I'll handle it from there."`;
+  }
 
   // Balance section — only shown when there's something to show
   const totalAvailable = balances.reduce((s, b) => s + b.usd_value, 0);

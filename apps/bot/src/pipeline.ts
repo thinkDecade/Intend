@@ -9,7 +9,8 @@
 
 import { isAddress } from 'viem';
 import type TelegramBot from 'node-telegram-bot-api';
-import { interpretIntent, generateConfirmationMessage, buildUFM, detectModeSwitch, loadERP } from '@intend/intelligence';
+import { interpretIntent, generateConfirmationMessage, buildUFM, detectModeSwitch, loadERP, getModel } from '@intend/intelligence';
+import { generateText } from 'ai';
 import type { EconomicRealityProfile } from '@intend/core';
 import { getOrCreateWallet, readBalances } from '@intend/execution';
 import { getActivePositions, getActiveGoals, getPendingConfirmations, logEvent, createIntent, scheduleReminders, updateUserSettings, getUserByTelegramId } from '@intend/data';
@@ -192,7 +193,16 @@ export async function runPipeline(
   const { intention, needs_clarification, clarification_question } = interpretation;
 
   // ── 3. Clarification ──────────────────────────────────────────────────────
-  if (needs_clarification && clarification_question) {
+  // Mirrors the web chat gate: only fire a clarification question when the
+  // user is clearly attempting an irreversible financial action (SEND /
+  // CONVERT / ALLOCATE) AND confidence sits in the ambiguous band. Greetings
+  // and small talk used to trigger the generic "Could you tell me a bit
+  // more?" line on every message — that is the bug visible in the bot
+  // screenshot loop.
+  const looksFinancial =
+    intention.intent_confidence >= 0.55 &&
+    (intention.primitive === 'SEND' || intention.primitive === 'CONVERT' || intention.primitive === 'ALLOCATE');
+  if (needs_clarification && clarification_question && looksFinancial) {
     addToHistory(session, 'assistant', clarification_question);
     session.state = 'clarifying';
     await saveSession(telegramId, session);
@@ -201,6 +211,13 @@ export async function runPipeline(
       user_id:    userId, event_type: 'intent_clarified', source: 'telegram',
       event_data: { primitive: intention.primitive, question: clarification_question },
     });
+    return;
+  }
+
+  // STORE is conversational in v0.5 — read-only (balance, address, deposits).
+  // Hand it off to the conversational LLM rather than the strategy router.
+  if (intention.primitive === 'STORE' || !looksFinancial) {
+    await handleConversational(bot, chatId, userId, telegramId, session, text, ufm);
     return;
   }
 
@@ -270,4 +287,78 @@ export async function runPipeline(
       ]],
     },
   });
+}
+
+// ── Conversational handler — STORE + low-confidence / non-financial chatter ─
+//
+// Replaces the "Could you tell me a bit more?" loop the bot previously hit on
+// every greeting. Streams a short reply from the primary model, with the
+// user's wallet address (when available) injected so the agent can answer
+// "what's my address" / "show me my balance" questions instead of stalling.
+
+async function handleConversational(
+  bot:        TelegramBot,
+  chatId:     number,
+  userId:     string,
+  telegramId: bigint,
+  session:    import('./session.js').BotSession,
+  text:       string,
+  ufm:        UserFinancialModel,
+): Promise<void> {
+  const dbUser = await getUserByTelegramId(telegramId).catch(() => null);
+  const displayName = dbUser?.display_name ?? null;
+
+  // Look up wallet (best-effort, with hard timeout). We don't provision here
+  // — the bot's /start command does that. If it's missing the agent will
+  // be honest about it.
+  let walletAddress: string | null = null;
+  try {
+    const wallet = await Promise.race([
+      getOrCreateWallet(userId, NETWORK === 'mainnet' ? 'base' : 'base-sepolia'),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('wallet timeout')), 4000)),
+    ]);
+    walletAddress = wallet.info.address;
+  } catch {
+    /* non-fatal */
+  }
+
+  const totalUsd = ufm.present.total_usd_value;
+  const balanceLine = totalUsd > 0
+    ? `Current wallet balance: $${totalUsd.toFixed(2)} USD equivalent.`
+    : 'Wallet is currently empty.';
+  const walletLine = walletAddress
+    ? `Wallet address: ${walletAddress}\nWhen they ask, share the full address — never truncate. To add funds they send USDC to that address from any other wallet or exchange.`
+    : `No wallet on file yet. If they ask about it, say it will be set up automatically — do not invent steps.`;
+
+  const systemPrompt = `You are Intend — a warm, direct personal financial concierge on Telegram.
+
+The user's name is ${displayName ?? 'there'}.
+${walletLine}
+${balanceLine}
+
+What you can do for them in v0.5 (all 4 are live):
+- Hold and show their balance (receive funds, share wallet address)
+- Send funds to anyone (person or merchant — destination is just an address)
+- Convert between assets at the best available rate
+- Allocate idle funds to earn yield, save toward a goal, or hedge inflation
+
+Rules you never break:
+1. Never name protocols, chains, or DeFi infrastructure
+2. Never use internal primitive names (STORE/SEND/CONVERT/ALLOCATE) in user-facing text — talk about what happens to the money
+3. If asked for something genuinely outside the four (KYC, fiat onramp, cards), say it's coming in a later version — never invent a workflow
+4. Never volunteer "wallet trouble" or other system issues unless the user explicitly asks
+5. When sharing a wallet address, show it in full — never truncate
+
+Telegram-specific: keep replies under 3 short sentences. No markdown tables. Be human, not a survey.`;
+
+  const result = await generateText({
+    model:    getModel('primary'),
+    system:   systemPrompt,
+    prompt:   text,
+    maxTokens: 220,
+  });
+
+  addToHistory(session, 'assistant', result.text);
+  await saveSession(telegramId, session);
+  await bot.sendMessage(chatId, result.text);
 }
