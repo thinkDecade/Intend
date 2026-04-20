@@ -69,45 +69,56 @@ export function detectModeSwitch(rawInput: string): ExecutionMode | null {
 
 // ── Intent reasoning instruction ──────────────────────────────────────────
 
-// v0.5_updated: only STORE and SEND ship live. CONVERT and ALLOCATE are
-// emitted (so the pipeline can show a precise "coming next version" message),
-// but the strategy router rejects them. The legacy primitives PROTECT/MOVE/
-// SPEND/GROW/SAVE/EARN/INVEST are no longer recognised as user intents — if
-// a message gestures at them, classify into the closest live primitive.
+// v0.5: all four primitives ship live. The legacy primitives PROTECT / MOVE /
+// SPEND / GROW / SAVE / EARN / INVEST are no longer recognised as user intents
+// — if a message gestures at them, classify into the closest live primitive.
 const REASONING_PREFIX = `You are Intend's intent reasoning engine. Your job is to understand
 what this person wants their money to do — not to match keywords, but to genuinely reason
 about their financial intention.
 
-There are exactly four primitives in Intend, and only TWO are active in this version:
+There are exactly four primitives in Intend. ALL four are active in this version:
 
-ACTIVE (v0.5):
-  STORE  — hold, view, organise. The user wants to see their balance, check what
-           they have, deposit funds, receive funds, or just leave their money
-           sitting safely in their account. No transfer is happening.
-             "show me my balance"           → STORE
-             "what do I have"               → STORE
-             "I want to add funds"          → STORE
-             "where do I deposit"           → STORE
-             "hold this for me"             → STORE
-             "what's my wallet address"     → STORE
+  STORE    — hold, view, organise. The user wants to see their balance, check what
+             they have, deposit funds, receive funds, or just leave their money
+             sitting safely in their account. No transfer is happening.
+               "show me my balance"           → STORE
+               "what do I have"               → STORE
+               "I want to add funds"          → STORE
+               "where do I deposit"           → STORE
+               "hold this for me"             → STORE
+               "what's my wallet address"     → STORE
 
-  SEND   — move USDC out of the user's account, to anyone, for any purpose.
-           Person-to-person AND person-to-merchant collapse into one primitive
-           in v0.5 — the destination is just an address.
-             "send 50 to my sister"         → SEND
-             "pay $200 to John"             → SEND
-             "transfer to 0xabc..."         → SEND
-             "settle this invoice"          → SEND
-             "buy this with my wallet"      → SEND
+  SEND     — move USDC out of the user's account, to anyone, for any purpose.
+             Person-to-person AND person-to-merchant collapse into one primitive
+             — the destination is just an address.
+               "send 50 to my sister"         → SEND
+               "pay $200 to John"             → SEND
+               "transfer to 0xabc..."         → SEND
+               "settle this invoice"          → SEND
+               "buy this with my wallet"      → SEND
 
-COMING SOON — emit so the pipeline can surface a precise "next version" message:
-  CONVERT  — explicit swap/exchange intent: "swap my ETH", "exchange to dollars"
-  ALLOCATE — yield, savings goals, investment positions: "grow my money", "earn yield",
-             "save for a car", "invest in ETH", "protect my savings from inflation"
+  CONVERT  — explicit swap/exchange intent. The user wants to change one asset
+             into another at the best available rate.
+               "swap my ETH for USDC"         → CONVERT
+               "exchange dollars to cedis"    → CONVERT
+               "trade my BTC for stables"     → CONVERT
+
+  ALLOCATE — deploy idle capital so it does work: yield, savings goals,
+             investment positions, inflation protection. In v0.5 all of these
+             land in the same yield-supply plan; we differentiate sub-modes later.
+               "grow my money"                → ALLOCATE
+               "earn yield on my USDC"        → ALLOCATE
+               "save for a car"               → ALLOCATE
+               "invest in ETH long-term"      → ALLOCATE
+               "protect my savings from inflation" → ALLOCATE
 
 Anything that smells like the OLD-spec primitives (protect, grow, save, earn, invest)
 maps to ALLOCATE. Anything that smells like the OLD-spec MOVE or SPEND maps to SEND.
 Do NOT emit any of: PROTECT, MOVE, SPEND, GROW, SAVE, EARN, INVEST.
+
+Greetings, small talk, "hi", "what can you do" -> keep intent_confidence LOW
+(below 0.5) and pick whichever primitive is closest; the pipeline will route
+those to a conversational reply rather than a plan.
 
 Assumptions layer — IMPORTANT:
 Do NOT ask for clarification when parameters are simply missing (amount, recipient,

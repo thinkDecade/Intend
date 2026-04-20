@@ -4,7 +4,7 @@
 // be removed wholesale once Convert (v0.6) and Allocate (v0.7) ship with
 // their own freshly-written builders.
 export { generatePlan, PrimitiveDisabledError,
-         buildSendPlan } from './strategy/index.js';
+         buildSendPlan, buildConvertPlan, buildGrowPlan } from './strategy/index.js';
 export type { StrategyContext, MoveRecipientType, SpendResult } from './strategy/index.js';
 
 export { resolveAssets, InsufficientBalanceError,

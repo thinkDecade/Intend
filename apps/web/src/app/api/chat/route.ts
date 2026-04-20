@@ -89,8 +89,9 @@ export async function POST(req: NextRequest) {
         }
 
         const CHAIN = process.env['NODE_ENV'] === 'production' ? 'base' : 'base_sepolia';
+        const NETWORK = process.env['NODE_ENV'] === 'production' ? 'base' : 'base-sepolia';
 
-        const [positions, goals, pending, walletRow, cachedBalances, erp] = await Promise.all([
+        const [positions, goals, pending, walletRowInitial, cachedBalances, erp] = await Promise.all([
           getActivePositions(userId).catch(() => []),
           getActiveGoals(userId).catch(() => []),
           getPendingConfirmations(userId).catch(() => []),
@@ -101,6 +102,40 @@ export async function POST(req: NextRequest) {
             return null as EconomicRealityProfile | null;
           }),
         ]);
+
+        // Self-heal: if onboarding is done but no wallet row exists (an earlier
+        // provisioning attempt failed silently, or DB write was rolled back),
+        // provision on-demand here. Idempotent — getOrCreateWallet returns the
+        // existing row if it's there. This guarantees the conversational agent
+        // always has a real address to share, never the misleading "your wallet
+        // will be created on first transaction" fallback.
+        let walletRow = walletRowInitial;
+        if (!walletRow && !isOnboarding) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const execution = await import('@intend/execution' as any);
+            const wallet = await (execution as {
+              getOrCreateWallet: (id: string, net: string) => Promise<{ info: { address: string; wallet_id: string } }>
+            }).getOrCreateWallet(userId, NETWORK);
+            walletRow = await getUserPrimaryWallet(userId, CHAIN as 'base' | 'base_sepolia').catch(() => null);
+            if (!walletRow) {
+              // Synthesise a minimal row from the just-created wallet so the
+              // current turn can still surface the address even if the read
+              // back lost a race with replication.
+              walletRow = {
+                wallet_id:  wallet.info.wallet_id,
+                user_id:    userId,
+                chain:      CHAIN,
+                address:    wallet.info.address,
+                provider:   'agentkit_cdp',
+                is_primary: true,
+                created_at: new Date().toISOString(),
+              };
+            }
+          } catch (err) {
+            console.warn('[chat] on-demand wallet provisioning failed:', err);
+          }
+        }
 
         const ufm = await buildUFM(userId, {
           balances: cachedBalances,
@@ -153,8 +188,15 @@ export async function POST(req: NextRequest) {
             ? buildOnboardingSystemPrompt(dbUser.display_name)
             : buildConversationalSystemPrompt(ufm, dbUser.display_name, walletRow?.address ?? null, cachedBalances);
 
-          // If there's a clarification question AND it makes sense for a financial intent, use it
-          if (!isOnboarding && needs_clarification && clarification_question && intention.intent_confidence > 0.4) {
+          // Clarification only makes sense when the user is clearly attempting
+          // a financial action but the parameters are ambiguous. For greetings,
+          // small talk, or out-of-scope chatter we let the conversational LLM
+          // handle it naturally instead of dropping a generic "tell me more"
+          // line that feels like a non-sequitur (the v0.5 issue we hit).
+          const looksFinancial =
+            intention.intent_confidence >= 0.55 &&
+            (intention.primitive === 'SEND' || intention.primitive === 'CONVERT' || intention.primitive === 'ALLOCATE');
+          if (!isOnboarding && needs_clarification && clarification_question && looksFinancial) {
             send({ type: 'text', content: clarification_question });
             send({ type: 'done' });
             controller.close();
@@ -372,10 +414,11 @@ function buildConversationalSystemPrompt(
   const walletSection = walletAddress
     ? `
 The user's wallet address is: ${walletAddress}
-When asked, share this address directly and completely — never truncate it.
-The wallet is on Base (a fast, low-cost Ethereum network), but NEVER mention the chain name to the user unless they specifically ask about technical details.`
+When asked for it, share the address directly and completely — never truncate, never say "let me check", never say it's being created.
+To receive funds, they send USDC to that address on Base. Do NOT name the chain unless they explicitly ask about technicals.
+Fiat deposits (card / bank) are not yet available — if asked, say it's coming in the next version, and meanwhile they can fund the wallet by sending USDC to the address above from any other crypto wallet or exchange.`
     : `
-The user does not have a wallet provisioned yet. If they ask about their wallet address or want to receive funds, tell them: "Your wallet will be created automatically the moment you make your first transaction — you don't need to do anything." Do not suggest they go somewhere or take manual steps.`;
+There is no wallet on file for this user right now — provisioning likely failed. If they ask about their wallet, be honest: "I'm having trouble loading your wallet right now — try refreshing, and if it persists please report it." Do NOT invent a future creation timeline.`;
 
   // Balance section — only shown when there's something to show
   const totalAvailable = balances.reduce((s, b) => s + b.usd_value, 0);
@@ -385,7 +428,7 @@ Current wallet balance: $${totalAvailable.toFixed(2)} USD equivalent
 Breakdown: ${balances.map(b => `${b.amount.toFixed(4)} ${b.asset} (~$${b.usd_value.toFixed(2)})`).join(', ')}
 When asked about their balance, give these specific numbers. If they ask whether they have enough for something, do the maths.`
     : `
-The wallet currently shows no balance (empty or not yet loaded). If they ask about their balance, tell them it appears to be empty and they can add funds from the Fund section.`;
+The wallet is currently empty. If they ask about their balance, say it's empty. If they ask how to add funds, give them the wallet address above and tell them to send USDC to it from any other wallet or exchange. There is NO "Fund section" or in-app fiat onramp yet — never invent one.`;
 
   return `You are Intend — a world-class personal financial concierge. You are warm, direct, and genuinely helpful. You speak like a trusted friend who happens to be a financial expert.
 
@@ -393,18 +436,16 @@ The user's name is ${name}.
 ${walletSection}
 ${balanceSection}
 
-What you can actually do for them right now (v0.5):
-- **Hold and show their balance** — receive funds, show wallet address, report what they have
+What you can do for them (v0.5 — all four are live):
+- **Hold and show their balance** — receive funds, share their wallet address, report exactly what they have
 - **Send funds to anyone** — to a person or to pay for something, in one motion. The destination is just an address.
-
-Coming soon (do NOT offer these — if asked, say honestly "that's coming in the next version"):
-- Converting between currencies at best rates
-- Allocating funds to grow, save toward a goal, or earn yield
+- **Convert between assets** — swap one asset for another at the best available rate (e.g. ETH → USDC, USDC → EURC)
+- **Allocate idle funds** — deploy what's sitting still into yield, save toward a named goal, or hedge against inflation
 
 Important rules you never break:
 1. Never name protocols, chains, or DeFi infrastructure to the user — speak in outcomes only
-2. Never reference primitives by name (no "PROTECT", "MOVE", "SPEND", "GROW", "EARN", "INVEST" — those words don't exist for the user)
-3. Never offer a capability that isn't in the active list above. If they ask for one, name it plainly and say it's coming in the next version
+2. Never reference primitives by their internal names (no "STORE", "SEND", "CONVERT", "ALLOCATE", "PROTECT", "MOVE", "SPEND", "GROW", "EARN", "INVEST" — those words don't exist for the user). Talk about what happens to the money.
+3. If they ask for something genuinely outside those four (KYC, fiat onramp, cards, mobile app), say plainly that it's coming in a later version — never invent a workflow that doesn't exist
 4. Never guarantee returns — use "historically", "typically", "expected to"
 5. Never give direct financial advice — present facts and options
 6. Never reveal technical implementation details

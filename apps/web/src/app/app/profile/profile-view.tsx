@@ -15,6 +15,8 @@ export interface ProfileData {
   telegram_linked: boolean;
   whatsapp_linked: boolean;
   execution_mode:  'semi_autonomous' | 'autonomous';
+  wallet_address:  string | null;
+  wallet_network:  string;
 }
 
 const KYC_LABELS: Record<string, string> = {
@@ -53,6 +55,15 @@ export default function ProfileView({ profile }: { profile: ProfileData }) {
   const [name, setName]           = useState(profile.display_name ?? '');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [pending, startTransition] = useTransition();
+  const [walletCopied, setWalletCopied] = useState(false);
+
+  function copyWallet() {
+    if (!profile.wallet_address) return;
+    void navigator.clipboard.writeText(profile.wallet_address).then(() => {
+      setWalletCopied(true);
+      setTimeout(() => setWalletCopied(false), 1800);
+    });
+  }
 
   const initials = getInitials(profile.display_name, profile.email);
 
@@ -203,6 +214,60 @@ export default function ProfileView({ profile }: { profile: ProfileData }) {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* ── Wallet ───────────────────────────────── */}
+        <div className="settings-group">
+          <div className="settings-group-label">Wallet</div>
+          {profile.wallet_address ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 12, flexWrap: 'wrap',
+              }}>
+                <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 12,
+                    color: 'var(--text)', wordBreak: 'break-all', lineHeight: 1.5,
+                  }}>
+                    {profile.wallet_address}
+                  </div>
+                  <div style={{
+                    fontSize: 11, color: 'var(--text3)', marginTop: 4,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                  }}>
+                    {profile.wallet_network} · USDC and other ERC-20 assets
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyWallet}
+                  style={{
+                    background: walletCopied ? 'var(--green, #4ade80)' : 'var(--accent)',
+                    color: '#1A1612', border: 'none', borderRadius: 8,
+                    padding: '8px 14px', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', flexShrink: 0,
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  {walletCopied ? 'Copied ✓' : 'Copy'}
+                </button>
+              </div>
+              <div style={{
+                fontSize: 12, color: 'var(--text3)', lineHeight: 1.5,
+                paddingTop: 10, borderTop: '1px solid var(--stroke-1)',
+              }}>
+                Send USDC (or any supported asset) to this address from another
+                wallet or exchange to fund your account. Fiat onramps are coming
+                in a later version.
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--text3)', lineHeight: 1.5 }}>
+              No wallet on file yet. Open the chat and send any message — Intend
+              will provision one for you automatically.
+            </div>
+          )}
         </div>
 
         {/* ── Connected channels ─────────────────── */}
