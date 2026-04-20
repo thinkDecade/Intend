@@ -25,18 +25,23 @@ interface Message {
   ts?:       number;
 }
 
+// Empty-state suggestion cards. Ordered: deposit-first (how money enters
+// the system), then SEND / CONVERT / ALLOCATE — matching the v0.5 spec
+// primitive order.
 const SUGGESTIONS = [
-  { label: 'Store my money safely',             primitive: 'STORE'   },
-  { label: 'Protect my savings from inflation', primitive: 'PROTECT' },
-  { label: 'Grow $500 at best rate',            primitive: 'GROW'    },
-  { label: 'Send $300 to Kwame',                primitive: 'MOVE'    },
+  { label: 'Add funds to my account',            primitive: 'STORE'    },
+  { label: 'Send $50 to a friend',               primitive: 'SEND'     },
+  { label: 'Swap my ETH for USDC',               primitive: 'CONVERT'  },
+  { label: 'Grow my idle USDC',                  primitive: 'ALLOCATE' },
 ];
 
+// Quick-action chips shown above the input once a conversation has started.
+// Same ordering rule as SUGGESTIONS.
 const ACTION_CHIPS = [
-  { label: 'Store',      message: 'I want to store my funds with Intend' },
-  { label: 'Add funds',  message: 'I want to add funds to my account' },
-  { label: 'Pay',        message: 'I want to make a payment' },
-  { label: 'Transfer',   message: 'I want to transfer money' },
+  { label: 'Add funds', message: 'I want to add funds to my account'              },
+  { label: 'Send',      message: 'I want to send money to someone'                },
+  { label: 'Convert',   message: 'I want to convert one asset into another'       },
+  { label: 'Grow',      message: 'I want to put my idle money to work'            },
 ];
 
 const STORAGE_KEY = 'intend:chat_messages';
@@ -75,6 +80,20 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Re-focus the textarea every time streaming finishes. Doing this in the
+  // sendMessage `finally` block doesn't always work because React re-enables
+  // the textarea on the next render — focusing a still-disabled element is
+  // a no-op. This effect runs AFTER the disabled flag flips back, so the
+  // cursor lands back in the input every reply without the user clicking.
+  useEffect(() => {
+    if (!isStreaming) {
+      // rAF lets the DOM commit the `disabled={false}` first.
+      const id = requestAnimationFrame(() => inputRef.current?.focus());
+      return () => cancelAnimationFrame(id);
+    }
+    return undefined;
+  }, [isStreaming]);
 
   // Onboarding: fire greeting from agent on first load
   useEffect(() => {
@@ -405,8 +424,18 @@ function MessageRow({
         className="msg-bubble"
         style={msg.status === 'error' ? { borderColor: 'var(--red)', color: 'var(--red)' } : undefined}
       >
-        {msg.content}
-        {msg.status === 'streaming' && <TypingCursor />}
+        {/* While the request is in flight but no token has arrived yet,
+            show the working-dots pulse so the user knows the agent is on it.
+            Once tokens start streaming, fall back to the inline blinking
+            cursor next to the live text. */}
+        {msg.status === 'streaming' && msg.content.length === 0
+          ? <WorkingDots />
+          : (
+            <>
+              {msg.content}
+              {msg.status === 'streaming' && <TypingCursor />}
+            </>
+          )}
       </div>
 
       {/* Confirmation preview card */}
@@ -429,6 +458,44 @@ function MessageRow({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Working dots ───────────────────────────────────────────────────────────
+// Three pulsing dots shown while the agent is "thinking" — i.e. between the
+// user pressing Send and the first streamed token arriving. Without this
+// the bubble looks empty and the user can't tell the agent is working.
+
+function WorkingDots() {
+  return (
+    <span className="working-dots" aria-label="Intend is working" role="status">
+      <span className="working-dot" />
+      <span className="working-dot" />
+      <span className="working-dot" />
+      <style>{`
+        .working-dots {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          height: 14px;
+          padding: 2px 0;
+        }
+        .working-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: currentColor;
+          opacity: 0.35;
+          animation: workingPulse 1.2s ease-in-out infinite;
+        }
+        .working-dot:nth-child(2) { animation-delay: 0.18s; }
+        .working-dot:nth-child(3) { animation-delay: 0.36s; }
+        @keyframes workingPulse {
+          0%, 80%, 100% { opacity: 0.25; transform: translateY(0) scale(0.85); }
+          40%           { opacity: 0.95; transform: translateY(-1px) scale(1);   }
+        }
+      `}</style>
+    </span>
   );
 }
 
