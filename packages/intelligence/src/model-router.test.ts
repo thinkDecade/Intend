@@ -119,23 +119,23 @@ describe('tierAvailable', () => {
     Object.assign(process.env, originalEnv);
   });
 
-  it('primary is unavailable when DEEPSEEK_API_KEY is absent', () => {
-    delete process.env['DEEPSEEK_API_KEY'];
+  it('primary is unavailable when ANTHROPIC_API_KEY is absent', () => {
+    delete process.env['ANTHROPIC_API_KEY'];
     expect(tierAvailable('primary')).toBe(false);
   });
 
-  it('primary is available when DEEPSEEK_API_KEY is set', () => {
-    process.env['DEEPSEEK_API_KEY'] = 'sk-deepseek-test';
+  it('primary is available when ANTHROPIC_API_KEY is set', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test';
     expect(tierAvailable('primary')).toBe(true);
   });
 
-  it('fallback1 is unavailable when ANTHROPIC_API_KEY is absent', () => {
-    delete process.env['ANTHROPIC_API_KEY'];
+  it('fallback1 is unavailable when DEEPSEEK_API_KEY is absent', () => {
+    delete process.env['DEEPSEEK_API_KEY'];
     expect(tierAvailable('fallback1')).toBe(false);
   });
 
-  it('fallback1 is available when ANTHROPIC_API_KEY is set', () => {
-    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test';
+  it('fallback1 is available when DEEPSEEK_API_KEY is set', () => {
+    process.env['DEEPSEEK_API_KEY'] = 'sk-deepseek-test';
     expect(tierAvailable('fallback1')).toBe(true);
   });
 
@@ -170,8 +170,8 @@ describe('withFallback — timeout behaviour', () => {
       return 'fallback-result';
     });
 
-    // Advance past primary's 20 s timeout (DeepSeek)
-    await vi.advanceTimersByTimeAsync(21_000);
+    // Advance past primary's 15 s timeout (Anthropic)
+    await vi.advanceTimersByTimeAsync(16_000);
 
     const result = await resultPromise;
     expect(result).toBe('fallback-result');

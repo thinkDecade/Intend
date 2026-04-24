@@ -2,20 +2,21 @@
  * Model Router — P0-04
  *
  * Provider chain (in fallback order):
- *   primary   → DeepSeek    deepseek-chat (V3)                  (paid, fast, reliable)
- *   fallback1 → Anthropic   Claude Sonnet 4.6                   (highest quality, pay-per-token)
+ *   primary   → Anthropic   Claude Sonnet 4.6                   (highest quality, pay-per-token)
+ *   fallback1 → DeepSeek    deepseek-chat (V3)                  (paid, fast, reliable backup)
  *   fallback2 → OpenRouter  openai/gpt-oss-120b:free            (120B OSS, 131K ctx)
  *   fast      → OpenRouter  openai/gpt-oss-20b:free             (20B OSS, lowest latency)
  *
- * DeepSeek is now first because it's reliably available while Anthropic
- * credit and OpenRouter free-tier quotas have been exhausting in production.
+ * DeepSeek sits at fallback1 so the moment Anthropic credit / quota
+ * issues hit, we cut over to a paid, reliable provider before falling
+ * down into OpenRouter's free tiers.
  *
  * Tiers without their API key set are skipped at request time — we never
  * burn a timeout on a provider we know we can't reach.
  *
  * Per-tier timeouts:
- *   primary   (DeepSeek)   20 s
- *   fallback1 (Anthropic)  15 s
+ *   primary   (Anthropic)  15 s
+ *   fallback1 (DeepSeek)   20 s
  *   fallback2 (OpenRouter) 30 s
  *   fast      (OpenRouter) 20 s
  */
@@ -56,17 +57,17 @@ interface TierConfig {
 const TIERS: TierConfig[] = [
   {
     tier:      'primary',
-    label:     'DeepSeek V3 (deepseek-chat)',
-    timeoutMs: 20_000,
-    envKey:    'DEEPSEEK_API_KEY',
-    getModel:  () => deepseek('deepseek-chat'),
-  },
-  {
-    tier:      'fallback1',
     label:     'Claude Sonnet 4.6 (Anthropic)',
     timeoutMs: 15_000,
     envKey:    'ANTHROPIC_API_KEY',
     getModel:  () => anthropic('claude-sonnet-4-6'),
+  },
+  {
+    tier:      'fallback1',
+    label:     'DeepSeek V3 (deepseek-chat)',
+    timeoutMs: 20_000,
+    envKey:    'DEEPSEEK_API_KEY',
+    getModel:  () => deepseek('deepseek-chat'),
   },
   {
     tier:      'fallback2',
