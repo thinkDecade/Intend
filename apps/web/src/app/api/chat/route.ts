@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { streamText }  from 'ai';
 import { cookies }     from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
 import {
@@ -10,6 +9,7 @@ import {
 import type { Balance } from '@intend/core';
 import {
   buildUFM, interpretIntent, streamConfirmationMessage, detectModeSwitch, loadERP,
+  streamWithFallback,
 } from '@intend/intelligence';
 import type { EconomicRealityProfile } from '@intend/core';
 import { updateUserSettings, logEvent, markOnboardingComplete, seedERPFromOnboarding } from '@intend/data';
@@ -224,9 +224,12 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // Stream response
-          const { textStream } = streamText({
-            model:    getModel('primary'),
+          // Stream response — go through streamWithFallback so a primary
+          // outage (Anthropic credit out, rate-limit, etc.) silently
+          // advances to DeepSeek before any token is committed. Without
+          // this, the user would see an empty assistant bubble whenever
+          // the primary tier fails.
+          const textStream = streamWithFallback({
             system:   systemPrompt,
             messages: allMessages,
           });

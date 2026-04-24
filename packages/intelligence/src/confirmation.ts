@@ -1,6 +1,6 @@
-import { generateText, streamText } from 'ai';
+import { generateText } from 'ai';
 import type { ExecutionPlan, UserFinancialModel, EconomicRealityProfile } from '@intend/core';
-import { withFallback, getModel } from './model-router.js';
+import { withFallback, streamWithFallback } from './model-router.js';
 import { buildSystemPrompt } from './system-prompt.js';
 
 const CONFIRMATION_RULES = `
@@ -42,17 +42,18 @@ export async function generateConfirmationMessage(
  * Stream a confirmation preview for the WebApp.
  * Returns an async iterable text stream — pipe to SSE response.
  *
- * Uses primary model directly; WebApp error boundary handles failure.
+ * Uses streamWithFallback so a primary-tier outage (Anthropic credit
+ * exhausted, rate-limit, etc.) silently advances to DeepSeek/OpenRouter
+ * before any user-facing token is committed — the user never sees an
+ * empty bubble.
  */
 export async function streamConfirmationMessage(
   plan: ExecutionPlan,
   ufm: UserFinancialModel,
   erp?: EconomicRealityProfile | null,
 ): Promise<AsyncIterable<string>> {
-  const { textStream } = streamText({
-    model: getModel('primary'),
+  return streamWithFallback({
     system: buildSystemPrompt(ufm, erp),
     prompt: `${CONFIRMATION_RULES}\n\nExecution plan:\n${JSON.stringify(plan, null, 2)}`,
   });
-  return textStream;
 }

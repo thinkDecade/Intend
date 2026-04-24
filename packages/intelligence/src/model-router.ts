@@ -23,6 +23,8 @@
 
 import { anthropic }    from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { streamText }   from 'ai';
+import type { CoreMessage } from 'ai';
 
 // ── DeepSeek provider (OpenAI-compatible) ──────────────────────────────────
 // Accept either DEEPSEEK_API_KEY (canonical) or DEEP_SEEK_API_KEY (the
@@ -192,6 +194,83 @@ export async function withFallback<T>(
 
   throw new Error(
     `[model-router] All model providers exhausted. Last error: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
+}
+
+/**
+ * Stream tokens with automatic provider fallback.
+ *
+ * Critical for the WebApp chat — if the primary tier (Anthropic) errors
+ * out *before any tokens arrive* (credit exhausted, rate limit, network),
+ * we silently advance to the next tier and stream from there. The user
+ * sees a normal streaming reply, not an empty bubble.
+ *
+ * Once a tier has emitted at least one token we can't restart on a different
+ * provider mid-sentence — at that point the stream is committed, and any
+ * later error propagates to the caller (who can render "stream interrupted").
+ *
+ * Pass exactly the args you'd pass to `streamText`, minus `model`.
+ */
+type StreamArgs = Omit<Parameters<typeof streamText>[0], 'model'> & {
+  // streamText accepts `system` + `prompt` OR `messages`; we just forward.
+  system?:   string;
+  prompt?:   string;
+  messages?: CoreMessage[];
+};
+
+export async function* streamWithFallback(args: StreamArgs): AsyncIterable<string> {
+  const usable = TIERS.filter((t) => Boolean(process.env[t.envKey]));
+
+  if (usable.length === 0) {
+    throw new Error(
+      '[model-router] No provider keys set. Configure DEEPSEEK_API_KEY, ' +
+      'ANTHROPIC_API_KEY, or OPENROUTER_API_KEY before streaming.',
+    );
+  }
+
+  let lastError: unknown;
+
+  for (let i = 0; i < usable.length; i++) {
+    const { tier, label, getModel: buildModel } = usable[i]!;
+    const isLast = i === usable.length - 1;
+    const model = buildModel();
+
+    try {
+      const result = streamText({ ...args, model });
+
+      let yielded = false;
+      // streamText fails *into* the iterator — wrap the for-await so an
+      // exception on the very first read drops us into the catch and we
+      // can advance to the next tier without ever showing an empty bubble.
+      for await (const chunk of result.textStream) {
+        yielded = true;
+        yield chunk;
+      }
+
+      if (yielded) {
+        if (i > 0) console.warn(`[model-router] Streaming via fallback tier: ${tier} (${label})`);
+        return;
+      }
+
+      // Zero tokens but no thrown error — treat as a soft failure and try
+      // the next tier. (Anthropic occasionally closes a stream early when
+      // credit is exhausted without raising.)
+      console.warn(`[model-router] ${label} produced no tokens — trying next tier.`);
+    } catch (err) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isLast) {
+        console.error(`[model-router] All streaming tiers exhausted. Last error: ${msg}`);
+        break;
+      }
+      console.warn(`[model-router] Streaming on ${label} failed — trying next tier. Reason: ${msg}`);
+    }
+  }
+
+  throw new Error(
+    `[model-router] All streaming providers exhausted. Last error: ${
       lastError instanceof Error ? lastError.message : String(lastError)
     }`,
   );

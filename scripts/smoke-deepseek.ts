@@ -21,7 +21,7 @@ async function main() {
   // Disable Anthropic so the chain advances to DeepSeek.
   delete process.env['ANTHROPIC_API_KEY'];
 
-  const { withFallback, logModelRouterStatus } = await import(
+  const { withFallback, streamWithFallback, logModelRouterStatus } = await import(
     '../packages/intelligence/src/model-router.js'
   );
   const { generateText } = await import('ai');
@@ -30,8 +30,8 @@ async function main() {
   logModelRouterStatus();
   console.log();
 
-  console.log('── Calling withFallback("Reply with the single word READY.") ──');
-  const start = Date.now();
+  console.log('── 1. withFallback (generateText) ──');
+  const t1 = Date.now();
   const result = await withFallback((model) =>
     generateText({
       model,
@@ -39,11 +39,21 @@ async function main() {
       maxTokens: 24,
     }),
   );
-  const ms = Date.now() - start;
-
+  console.log(`✓ generate ok in ${Date.now() - t1} ms — "${result.text.trim()}"`);
   console.log();
-  console.log(`✓ DeepSeek responded in ${ms} ms`);
-  console.log(`  text: "${result.text.trim()}"`);
+
+  console.log('── 2. streamWithFallback (textStream) ──');
+  const t2 = Date.now();
+  let buf = '';
+  for await (const chunk of streamWithFallback({
+    prompt:    'Count from one to five, separated by commas. No other words.',
+    maxTokens: 64,
+  })) {
+    buf += chunk;
+    process.stdout.write(chunk);
+  }
+  console.log();
+  console.log(`✓ stream ok in ${Date.now() - t2} ms — got ${buf.length} chars`);
 }
 
 main().catch((err) => {
