@@ -25,6 +25,16 @@ import { anthropic }    from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 
 // ── DeepSeek provider (OpenAI-compatible) ──────────────────────────────────
+// Accept either DEEPSEEK_API_KEY (canonical) or DEEP_SEEK_API_KEY (the
+// underscore variant some teammates default to) so a typo in .env doesn't
+// silently disable the tier.
+
+// Alias the underscore variant onto the canonical name so every downstream
+// check (tierAvailable, withFallback's env filter, logModelRouterStatus)
+// just works without special-casing.
+if (!process.env['DEEPSEEK_API_KEY'] && process.env['DEEP_SEEK_API_KEY']) {
+  process.env['DEEPSEEK_API_KEY'] = process.env['DEEP_SEEK_API_KEY'];
+}
 
 const deepseek = createOpenAI({
   baseURL: 'https://api.deepseek.com',
