@@ -2,25 +2,35 @@
  * Model Router — P0-04
  *
  * Provider chain (in fallback order):
- *   primary   → Anthropic   Claude Sonnet 4.6                   (best quality, pay-per-token)
- *   fallback1 → OpenRouter  openai/gpt-oss-120b:free           (120B OSS, 131K ctx)
- *   fallback2 → OpenRouter  nvidia/nemotron-3-super-120b:free  (120B Nemotron, 262K ctx)
- *   fast      → OpenRouter  openai/gpt-oss-20b:free            (20B OSS, lowest latency)
+ *   primary   → DeepSeek    deepseek-chat (V3)                  (paid, fast, reliable)
+ *   fallback1 → Anthropic   Claude Sonnet 4.6                   (highest quality, pay-per-token)
+ *   fallback2 → OpenRouter  openai/gpt-oss-120b:free            (120B OSS, 131K ctx)
+ *   fast      → OpenRouter  openai/gpt-oss-20b:free             (20B OSS, lowest latency)
  *
- * All OpenRouter tiers are zero-cost (:free suffix).
- * Primary requires ANTHROPIC_API_KEY. Fallbacks require OPENROUTER_API_KEY.
+ * DeepSeek is now first because it's reliably available while Anthropic
+ * credit and OpenRouter free-tier quotas have been exhausting in production.
  *
- * Per-tier timeouts account for free-tier latency variance:
- *   primary   15 s — Anthropic is fast
- *   fallback1 30 s — free models can queue
- *   fallback2 30 s
- *   fast      20 s
+ * Tiers without their API key set are skipped at request time — we never
+ * burn a timeout on a provider we know we can't reach.
+ *
+ * Per-tier timeouts:
+ *   primary   (DeepSeek)   20 s
+ *   fallback1 (Anthropic)  15 s
+ *   fallback2 (OpenRouter) 30 s
+ *   fast      (OpenRouter) 20 s
  */
 
 import { anthropic }    from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 
-// ── OpenRouter provider (OpenAI-compatible API) ────────────────────────────
+// ── DeepSeek provider (OpenAI-compatible) ──────────────────────────────────
+
+const deepseek = createOpenAI({
+  baseURL: 'https://api.deepseek.com',
+  apiKey:  process.env['DEEPSEEK_API_KEY'] ?? '',
+});
+
+// ── OpenRouter provider (OpenAI-compatible) ────────────────────────────────
 
 const openrouter = createOpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -39,50 +49,83 @@ interface TierConfig {
   tier:        ModelTier;
   label:       string;   // human-readable for logs
   timeoutMs:   number;
-  getModel:    () => ReturnType<typeof anthropic> | ReturnType<typeof openrouter>;
+  envKey:      string;   // env var that must be present for this tier to be tried
+  getModel:    () => ReturnType<typeof anthropic> | ReturnType<typeof openrouter> | ReturnType<typeof deepseek>;
 }
 
 const TIERS: TierConfig[] = [
   {
     tier:      'primary',
-    label:     'Claude Sonnet 4.6 (Anthropic)',
-    timeoutMs: 15_000,
-    getModel:  () => anthropic('claude-sonnet-4-6'),
+    label:     'DeepSeek V3 (deepseek-chat)',
+    timeoutMs: 20_000,
+    envKey:    'DEEPSEEK_API_KEY',
+    getModel:  () => deepseek('deepseek-chat'),
   },
   {
     tier:      'fallback1',
-    label:     'GPT-OSS-120B free (OpenRouter)',
-    timeoutMs: 30_000,
-    getModel:  () => openrouter('openai/gpt-oss-120b:free'),
+    label:     'Claude Sonnet 4.6 (Anthropic)',
+    timeoutMs: 15_000,
+    envKey:    'ANTHROPIC_API_KEY',
+    getModel:  () => anthropic('claude-sonnet-4-6'),
   },
   {
     tier:      'fallback2',
-    label:     'Nemotron-120B free (OpenRouter)',
+    label:     'GPT-OSS-120B free (OpenRouter)',
     timeoutMs: 30_000,
-    getModel:  () => openrouter('nvidia/nemotron-3-super-120b-a12b:free'),
+    envKey:    'OPENROUTER_API_KEY',
+    getModel:  () => openrouter('openai/gpt-oss-120b:free'),
   },
   {
     tier:      'fast',
     label:     'GPT-OSS-20B free (OpenRouter)',
     timeoutMs: 20_000,
+    envKey:    'OPENROUTER_API_KEY',
     getModel:  () => openrouter('openai/gpt-oss-20b:free'),
   },
 ];
 
 // ── Public helpers ─────────────────────────────────────────────────────────
 
-/** Return the model for a specific tier (useful for streaming which always uses primary). */
+/**
+ * Return the model for a specific tier (useful for streaming which always
+ * wants a single model rather than the whole fallback chain).
+ *
+ * Falls back gracefully: if the requested tier's API key is missing, returns
+ * the first available tier instead so callers don't have to special-case it.
+ */
 export function getModel(tier: ModelTier = 'primary') {
-  const config = TIERS.find((t) => t.tier === tier);
-  if (!config) throw new Error(`Unknown model tier: ${tier}`);
-  return config.getModel();
+  const requested = TIERS.find((t) => t.tier === tier);
+  if (!requested) throw new Error(`Unknown model tier: ${tier}`);
+
+  // If the requested tier is configured, use it.
+  if (process.env[requested.envKey]) return requested.getModel();
+
+  // Otherwise return the first tier whose key is set — keeps single-shot
+  // streaming alive even when the "preferred" provider is unavailable.
+  const available = TIERS.find((t) => Boolean(process.env[t.envKey]));
+  if (!available) {
+    // Surface a useful error for ops; callers will see this in their logs.
+    console.warn(
+      `[model-router] No provider keys set — falling back to requested tier "${tier}". ` +
+      `Calls will fail until DEEPSEEK_API_KEY / ANTHROPIC_API_KEY / OPENROUTER_API_KEY is set.`,
+    );
+    return requested.getModel();
+  }
+  if (available.tier !== tier) {
+    console.warn(
+      `[model-router] Requested tier "${tier}" has no key — using "${available.tier}" (${available.label}) instead.`,
+    );
+  }
+  return available.getModel();
 }
 
 /**
  * Execute `fn` with automatic provider fallback.
  *
- * Tries each tier in order. On error or timeout, logs a warning and advances
- * to the next tier. Throws only when all tiers are exhausted.
+ * Tries each tier in order, **skipping any whose API key is unset** so we
+ * never burn a 15–30 s timeout on a provider we know we can't reach. On
+ * error or timeout, logs a warning and advances to the next tier. Throws
+ * only when every available tier has been exhausted.
  *
  * The `fn` callback receives the LanguageModel for the current tier.
  * Pass that model directly to `generateObject`, `generateText`, or `streamText`.
@@ -92,7 +135,18 @@ export async function withFallback<T>(
 ): Promise<T> {
   let lastError: unknown;
 
-  for (const { tier, label, timeoutMs, getModel: buildModel } of TIERS) {
+  const usable = TIERS.filter((t) => Boolean(process.env[t.envKey]));
+
+  if (usable.length === 0) {
+    throw new Error(
+      '[model-router] No provider keys set. Configure DEEPSEEK_API_KEY, ' +
+      'ANTHROPIC_API_KEY, or OPENROUTER_API_KEY before making model calls.',
+    );
+  }
+
+  for (let i = 0; i < usable.length; i++) {
+    const { tier, label, timeoutMs, getModel: buildModel } = usable[i]!;
+    const isLast = i === usable.length - 1;
     const model = buildModel();
 
     try {
@@ -106,8 +160,8 @@ export async function withFallback<T>(
         ),
       ]);
 
-      if (tier !== 'primary') {
-        // Surface to monitoring so we know primary is degraded
+      // Surface degraded mode to ops monitoring
+      if (i > 0) {
         console.warn(`[model-router] Using fallback tier: ${tier} (${label})`);
       }
 
@@ -116,8 +170,7 @@ export async function withFallback<T>(
       lastError = err;
       const msg = err instanceof Error ? err.message : String(err);
 
-      if (tier === 'fast') {
-        // All tiers exhausted
+      if (isLast) {
         console.error(`[model-router] All tiers exhausted. Last error: ${msg}`);
         break;
       }
@@ -138,14 +191,9 @@ export async function withFallback<T>(
  * Useful for startup diagnostics / health-check endpoint.
  */
 export function tierAvailable(tier: ModelTier): boolean {
-  switch (tier) {
-    case 'primary':
-      return Boolean(process.env['ANTHROPIC_API_KEY']);
-    case 'fallback1':
-    case 'fallback2':
-    case 'fast':
-      return Boolean(process.env['OPENROUTER_API_KEY']);
-  }
+  const config = TIERS.find((t) => t.tier === tier);
+  if (!config) return false;
+  return Boolean(process.env[config.envKey]);
 }
 
 /**
@@ -154,14 +202,14 @@ export function tierAvailable(tier: ModelTier): boolean {
  */
 export function logModelRouterStatus(): void {
   console.info('[model-router] Provider status:');
-  for (const { tier, label } of TIERS) {
-    const available = tierAvailable(tier);
-    console.info(`  ${available ? '✓' : '✗'} ${tier.padEnd(10)} ${label}`);
+  for (const { tier, label, envKey } of TIERS) {
+    const available = Boolean(process.env[envKey]);
+    console.info(`  ${available ? '✓' : '✗'} ${tier.padEnd(10)} ${label}${available ? '' : `  (set ${envKey})`}`);
   }
-  const anyAvailable = TIERS.some(({ tier }) => tierAvailable(tier));
+  const anyAvailable = TIERS.some(({ envKey }) => process.env[envKey]);
   if (!anyAvailable) {
     console.error(
-      '[model-router] ⚠️  No providers available — set ANTHROPIC_API_KEY or OPENROUTER_API_KEY',
+      '[model-router] ⚠️  No providers available — set DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY',
     );
   }
 }

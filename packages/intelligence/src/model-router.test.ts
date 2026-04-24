@@ -11,6 +11,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { withFallback, getModel, tierAvailable, type ModelTier } from './model-router.js';
 
+// Ensure every tier is "available" in unit-test mode so the fallback chain
+// runs end-to-end even without real keys in the environment. The mocks
+// passed to withFallback never actually hit the network.
+process.env['DEEPSEEK_API_KEY']   ||= 'test-deepseek';
+process.env['ANTHROPIC_API_KEY']  ||= 'test-anthropic';
+process.env['OPENROUTER_API_KEY'] ||= 'test-openrouter';
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /** Build a mock model that resolves / rejects on demand. */
@@ -112,26 +119,34 @@ describe('tierAvailable', () => {
     Object.assign(process.env, originalEnv);
   });
 
-  it('primary is unavailable when ANTHROPIC_API_KEY is absent', () => {
-    delete process.env['ANTHROPIC_API_KEY'];
+  it('primary is unavailable when DEEPSEEK_API_KEY is absent', () => {
+    delete process.env['DEEPSEEK_API_KEY'];
     expect(tierAvailable('primary')).toBe(false);
   });
 
-  it('primary is available when ANTHROPIC_API_KEY is set', () => {
-    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test';
+  it('primary is available when DEEPSEEK_API_KEY is set', () => {
+    process.env['DEEPSEEK_API_KEY'] = 'sk-deepseek-test';
     expect(tierAvailable('primary')).toBe(true);
   });
 
-  it('fallback1/2/fast are unavailable when OPENROUTER_API_KEY is absent', () => {
-    delete process.env['OPENROUTER_API_KEY'];
+  it('fallback1 is unavailable when ANTHROPIC_API_KEY is absent', () => {
+    delete process.env['ANTHROPIC_API_KEY'];
     expect(tierAvailable('fallback1')).toBe(false);
+  });
+
+  it('fallback1 is available when ANTHROPIC_API_KEY is set', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test';
+    expect(tierAvailable('fallback1')).toBe(true);
+  });
+
+  it('fallback2/fast are unavailable when OPENROUTER_API_KEY is absent', () => {
+    delete process.env['OPENROUTER_API_KEY'];
     expect(tierAvailable('fallback2')).toBe(false);
     expect(tierAvailable('fast')).toBe(false);
   });
 
-  it('fallback1/2/fast are available when OPENROUTER_API_KEY is set', () => {
+  it('fallback2/fast are available when OPENROUTER_API_KEY is set', () => {
     process.env['OPENROUTER_API_KEY'] = 'sk-or-test';
-    expect(tierAvailable('fallback1')).toBe(true);
     expect(tierAvailable('fallback2')).toBe(true);
     expect(tierAvailable('fast')).toBe(true);
   });
@@ -155,8 +170,8 @@ describe('withFallback — timeout behaviour', () => {
       return 'fallback-result';
     });
 
-    // Advance past primary's 15 s timeout
-    await vi.advanceTimersByTimeAsync(16_000);
+    // Advance past primary's 20 s timeout (DeepSeek)
+    await vi.advanceTimersByTimeAsync(21_000);
 
     const result = await resultPromise;
     expect(result).toBe('fallback-result');
