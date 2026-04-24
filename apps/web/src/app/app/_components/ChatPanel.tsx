@@ -14,37 +14,66 @@ interface PlanMeta {
   description: string;
 }
 
-interface Message {
-  id:        string;
-  role:      'user' | 'assistant';
-  content:   string;
-  plan?:     PlanMeta;
-  status?:   'streaming' | 'done' | 'error';
-  confirmed?: boolean;
-  /** ms epoch — used for time-gap separators (iMessage style). */
-  ts?:       number;
+interface Milestone {
+  id:        string;                          // unique key for de-dupe
+  kind:      'wallet_ready' | 'transaction';  // future: 'allocation', 'goal_funded', etc.
+  title:     string;
+  address?:  string;
+  network?:  string;
+  provider?: string;
+  amount?:   number;
+  asset?:    string;
 }
 
-// Empty-state suggestion cards. Ordered: deposit-first (how money enters
-// the system), then SEND / CONVERT / ALLOCATE — matching the v0.5 spec
-// primitive order.
-const SUGGESTIONS = [
-  { label: 'Add funds to my account',            primitive: 'STORE'    },
-  { label: 'Send $50 to a friend',               primitive: 'SEND'     },
-  { label: 'Swap my ETH for USDC',               primitive: 'CONVERT'  },
-  { label: 'Grow my idle USDC',                  primitive: 'ALLOCATE' },
-];
+interface Message {
+  id:         string;
+  role:       'user' | 'assistant';
+  content:    string;
+  plan?:      PlanMeta;
+  milestone?: Milestone;
+  status?:    'streaming' | 'done' | 'error';
+  confirmed?: boolean;
+  /** ms epoch — used for time-gap separators (iMessage style). */
+  ts?:        number;
+}
 
-// Quick-action chips shown above the input once a conversation has started.
-// Same ordering rule as SUGGESTIONS.
+// Quick-action chips. One canonical list used in BOTH the empty state and
+// after the conversation starts — so the user doesn't see them visually
+// re-shape the moment they send their first message. Ordered deposit-first
+// (how money enters the system), then SEND / CONVERT / ALLOCATE per spec.
 const ACTION_CHIPS = [
-  { label: 'Add funds', message: 'I want to add funds to my account'              },
-  { label: 'Send',      message: 'I want to send money to someone'                },
-  { label: 'Convert',   message: 'I want to convert one asset into another'       },
-  { label: 'Grow',      message: 'I want to put my idle money to work'            },
+  { label: 'Add funds', message: 'I want to add funds to my account'        },
+  { label: 'Send',      message: 'I want to send money to someone'          },
+  { label: 'Convert',   message: 'I want to convert one asset into another' },
+  { label: 'Grow',      message: 'I want to put my idle money to work'      },
 ];
 
-const STORAGE_KEY = 'intend:chat_messages';
+const STORAGE_KEY            = 'intend:chat_messages';
+const KNOWN_WALLET_KEY       = 'intend:known_wallet';
+const KNOWN_MILESTONES_KEY   = 'intend:known_milestones';
+
+function loadKnownWallet(): string | null {
+  if (typeof window === 'undefined') return null;
+  try { return localStorage.getItem(KNOWN_WALLET_KEY); } catch { return null; }
+}
+
+function loadKnownMilestones(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(KNOWN_MILESTONES_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch { return []; }
+}
+
+function rememberMilestone(id: string, address?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const ms = new Set(loadKnownMilestones());
+    ms.add(id);
+    localStorage.setItem(KNOWN_MILESTONES_KEY, JSON.stringify(Array.from(ms)));
+    if (address) localStorage.setItem(KNOWN_WALLET_KEY, address);
+  } catch { /* ignore */ }
+}
 
 // ── ChatPanel ──────────────────────────────────────────────────────────────
 
@@ -149,7 +178,14 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: actualMessage, userId, history, isOnboarding }),
+        body: JSON.stringify({
+          message:         actualMessage,
+          userId,
+          history,
+          isOnboarding,
+          knownWallet:     loadKnownWallet(),
+          knownMilestones: loadKnownMilestones(),
+        }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -171,7 +207,13 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
           const raw = line.slice(6).trim();
           if (!raw || raw === '[DONE]') continue;
 
-          let event: { type: string; content?: string; plan?: PlanMeta; error?: string };
+          let event: {
+            type:       string;
+            content?:   string;
+            plan?:      PlanMeta;
+            milestone?: Milestone;
+            error?:     string;
+          };
           try { event = JSON.parse(raw); } catch { continue; }
 
           if (event.type === 'text' && event.content) {
@@ -184,6 +226,22 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
             setMessages(prev => prev.map(m =>
               m.id === assistantId ? { ...m, plan: event.plan as PlanMeta, status: 'done' } : m
             ));
+          } else if (event.type === 'milestone' && event.milestone) {
+            // Append a dedicated milestone message so the receipt-style card
+            // gets its own bubble. De-duped server-side via knownMilestones.
+            const ms = event.milestone;
+            rememberMilestone(ms.id, ms.address);
+            setMessages(prev => [
+              ...prev,
+              {
+                id:        crypto.randomUUID(),
+                role:      'assistant',
+                content:   '',
+                milestone: ms,
+                status:    'done',
+                ts:        Date.now(),
+              },
+            ]);
           } else if (event.type === 'onboarding_complete') {
             // Server has saved profile + marked onboarding done. Reload to get fresh layout.
             startTransition(() => {
@@ -308,31 +366,18 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
 
       {/* Input area */}
       <div className="input-area">
-        {isEmpty ? (
-          <div className="suggestions">
-            {SUGGESTIONS.map(s => (
-              <button
-                key={s.label}
-                className="suggest-chip"
-                onClick={() => void sendMessage(s.label)}
-              >
-                <span className="suggest-chip-primitive">{s.primitive}</span>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="action-chips">
-            {ACTION_CHIPS.map(a => (
-              <button
-                key={a.label}
-                className="action-chip"
-                disabled={isStreaming}
-                onClick={() => void sendMessage(a.message)}
-              >
-                {a.label}
-              </button>
-            ))}
+        <div className="action-chips">
+          {ACTION_CHIPS.map(a => (
+            <button
+              key={a.label}
+              className="action-chip"
+              disabled={isStreaming}
+              onClick={() => void sendMessage(a.message)}
+            >
+              {a.label}
+            </button>
+          ))}
+          {!isEmpty && (
             <button
               className="action-chip action-chip--clear"
               disabled={isStreaming}
@@ -344,8 +389,8 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
             >
               Clear
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="input-bar">
           {/* intend:// prefix */}
@@ -418,6 +463,15 @@ function MessageRow({
     isLastInGroup  ? 'msg--last'  : '',
   ].filter(Boolean).join(' ');
 
+  // Milestone-only messages render as a standalone card (no chat bubble).
+  if (msg.milestone && !msg.content) {
+    return (
+      <div className={`${groupClasses} msg--milestone`}>
+        <MilestoneCard milestone={msg.milestone} />
+      </div>
+    );
+  }
+
   return (
     <div className={groupClasses}>
       <div
@@ -459,6 +513,93 @@ function MessageRow({
       )}
     </div>
   );
+}
+
+// ── Milestone card ─────────────────────────────────────────────────────────
+// Receipt-style card surfaced after major milestones (wallet creation,
+// completed transactions, hit savings goals, etc.). Designed to feel like
+// a proper artefact — not a chat bubble — so it lands with weight.
+
+function MilestoneCard({ milestone }: { milestone: Milestone }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = async () => {
+    if (!milestone.address) return;
+    try {
+      await navigator.clipboard.writeText(milestone.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* ignore */ }
+  };
+
+  if (milestone.kind === 'wallet_ready') {
+    return (
+      <div className="milestone-card milestone-card--wallet">
+        <div className="milestone-card-shine" aria-hidden="true" />
+        <div className="milestone-card-header">
+          <div className="milestone-card-eyebrow">
+            <span className="milestone-card-dot" />
+            <span>Account live</span>
+          </div>
+          <span className="milestone-card-net">{milestone.network ?? 'Base'}</span>
+        </div>
+
+        <div className="milestone-card-iconring" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </div>
+
+        <div className="milestone-card-title">{milestone.title}</div>
+        <div className="milestone-card-sub">
+          You can now hold funds and send to anyone, anywhere.
+        </div>
+
+        {milestone.address && (
+          <button className="milestone-card-addr" onClick={copyAddress} title="Copy address">
+            <span className="milestone-card-addr-label">Wallet address</span>
+            <span className="milestone-card-addr-val">{milestone.address}</span>
+            <span className="milestone-card-addr-copy">{copied ? 'Copied ✓' : 'Tap to copy'}</span>
+          </button>
+        )}
+
+        <div className="milestone-card-meta">
+          <div className="milestone-card-meta-row">
+            <span>Custody</span>
+            <span>{milestone.provider ?? 'Coinbase secure enclave'}</span>
+          </div>
+          <div className="milestone-card-meta-row">
+            <span>Network</span>
+            <span>{milestone.network ?? 'Base'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (milestone.kind === 'transaction') {
+    return (
+      <div className="milestone-card milestone-card--tx">
+        <div className="milestone-card-shine" aria-hidden="true" />
+        <div className="milestone-card-header">
+          <div className="milestone-card-eyebrow">
+            <span className="milestone-card-dot" />
+            <span>Done</span>
+          </div>
+        </div>
+        <div className="milestone-card-title">{milestone.title}</div>
+        {milestone.amount !== undefined && (
+          <div className="milestone-card-amount">
+            <span className="milestone-card-amount-currency">$</span>
+            {milestone.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {milestone.asset && <span className="milestone-card-amount-asset">{milestone.asset}</span>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ── Working dots ───────────────────────────────────────────────────────────

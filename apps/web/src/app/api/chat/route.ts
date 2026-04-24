@@ -42,18 +42,25 @@ export async function POST(req: NextRequest) {
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json() as {
-    message?:      string;
-    userId?:       string;
-    history?:      HistoryMessage[];
-    isOnboarding?: boolean;
+    message?:        string;
+    userId?:         string;
+    history?:        HistoryMessage[];
+    isOnboarding?:   boolean;
+    /** Wallet address the client already knows. If we discover one server-side
+     *  that the client doesn't yet know about, we emit a `milestone` SSE event
+     *  so the chat shows a one-time celebratory receipt card. */
+    knownWallet?:    string | null;
+    knownMilestones?: string[];
   };
 
   const message      = body.message?.trim();
   if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 });
 
-  const userId       = body.userId ?? '';
-  const history      = (body.history ?? []).slice(-20);
-  const isOnboarding = body.isOnboarding ?? false;
+  const userId          = body.userId ?? '';
+  const history         = (body.history ?? []).slice(-20);
+  const isOnboarding    = body.isOnboarding ?? false;
+  const knownWallet     = body.knownWallet ?? null;
+  const knownMilestones = new Set(body.knownMilestones ?? []);
 
   // ── Mode-switch detection (pre-LLM, regex only) ──────────────────────────
   const newMode = detectModeSwitch(message);
@@ -228,6 +235,29 @@ export async function POST(req: NextRequest) {
             send({ type: 'text', content: chunk });
           }
 
+          // ── Milestone: wallet ready ─────────────────────────────────────
+          // If we just discovered a wallet on this turn that the client
+          // didn't know about, emit a one-time celebratory card. Client
+          // de-dupes via `knownMilestones` so refreshing the page doesn't
+          // re-show it.
+          if (
+            walletRow?.address
+            && walletRow.address !== knownWallet
+            && !knownMilestones.has(`wallet:${walletRow.address}`)
+          ) {
+            send({
+              type: 'milestone',
+              milestone: {
+                id:      `wallet:${walletRow.address}`,
+                kind:    'wallet_ready',
+                title:   'Your account is live',
+                address: walletRow.address,
+                network: CHAIN === 'base' ? 'Base' : 'Base Sepolia',
+                provider: 'Coinbase secure enclave',
+              },
+            });
+          }
+
           // Onboarding extraction — after 2+ user messages, kick off profile
           // extraction + wallet provisioning IN THE BACKGROUND. Both are slow
           // (LLM call + CDP API) and were previously serialised inside the SSE
@@ -282,6 +312,25 @@ export async function POST(req: NextRequest) {
         const textStream = await streamConfirmationMessage(fullPlan, ufm, erp);
         for await (const chunk of textStream) {
           send({ type: 'text', content: chunk });
+        }
+
+        // Wallet milestone (same de-dupe rule as the conversational branch).
+        if (
+          walletRow?.address
+          && walletRow.address !== knownWallet
+          && !knownMilestones.has(`wallet:${walletRow.address}`)
+        ) {
+          send({
+            type: 'milestone',
+            milestone: {
+              id:      `wallet:${walletRow.address}`,
+              kind:    'wallet_ready',
+              title:   'Your account is live',
+              address: walletRow.address,
+              network: CHAIN === 'base' ? 'Base' : 'Base Sepolia',
+              provider: 'Coinbase secure enclave',
+            },
+          });
         }
 
         send({

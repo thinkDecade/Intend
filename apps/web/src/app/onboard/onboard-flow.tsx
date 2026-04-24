@@ -210,16 +210,43 @@ export function OnboardFlow({ email }: Props) {
                 transition={{ duration: 0.4, ease }}
                 className="ob-side-card ob-side-card--setup"
               >
-                <div className="ob-side-eyebrow">Setting up</div>
-                <h3 className="ob-side-heading">Your account</h3>
-                <ul className="ob-progress-list">
-                  <li className={progressClass(state, 'greeting',  'location')}>Where you live</li>
-                  <li className={progressClass(state, 'location',  'income')}>Income comfort</li>
-                  <li className={progressClass(state, 'income',    'risk')}>Risk &amp; horizon</li>
-                  <li className={progressClass(state, 'risk',      'wallet')}>Account ready</li>
-                </ul>
+                <div className="ob-side-eyebrow">Working in the background</div>
+                <h3 className="ob-side-heading">Spinning up your account</h3>
+
+                <div className="ob-bg-work" aria-live="polite">
+                  <div className="ob-bg-orb">
+                    <div className="ob-bg-orbit">
+                      <span className="ob-bg-particle ob-bg-particle--1" />
+                      <span className="ob-bg-particle ob-bg-particle--2" />
+                      <span className="ob-bg-particle ob-bg-particle--3" />
+                    </div>
+                  </div>
+
+                  <div className="ob-bg-status">{statusLine(state)}</div>
+
+                  <ul className="ob-bg-steps">
+                    <li className={bgStepClass(state, 'greeting', 'location')}>
+                      <span className="ob-bg-step-bullet" />
+                      Reading your context
+                    </li>
+                    <li className={bgStepClass(state, 'location', 'income')}>
+                      <span className="ob-bg-step-bullet" />
+                      Tuning to your currency &amp; region
+                    </li>
+                    <li className={bgStepClass(state, 'income', 'risk')}>
+                      <span className="ob-bg-step-bullet" />
+                      Calibrating to your comfort
+                    </li>
+                    <li className={bgStepClass(state, 'risk', 'wallet')}>
+                      <span className="ob-bg-step-bullet" />
+                      Provisioning a secure account
+                    </li>
+                  </ul>
+                </div>
+
                 <p className="ob-side-foot">
-                  Intend is provisioning your secure account in the background.
+                  Your secure account is being created in a hardware enclave —
+                  no keys ever touch Intend&apos;s servers.
                 </p>
               </motion.div>
             ) : (
@@ -267,4 +294,25 @@ function progressClass(current: OnboardingState, mineEnter: OnboardingState, min
   if (ci >= di) return 'ob-progress-li ob-progress-li--done';
   if (ci >= order.indexOf(mineEnter)) return 'ob-progress-li ob-progress-li--current';
   return 'ob-progress-li';
+}
+
+function bgStepClass(current: OnboardingState, enter: OnboardingState, done: OnboardingState): string {
+  const order: OnboardingState[] = ['greeting', 'location', 'income', 'risk', 'wallet', 'intent', 'done'];
+  const ci = order.indexOf(current);
+  if (ci >= order.indexOf(done))  return 'ob-bg-step ob-bg-step--done';
+  if (ci >= order.indexOf(enter)) return 'ob-bg-step ob-bg-step--active';
+  return 'ob-bg-step';
+}
+
+function statusLine(state: OnboardingState): string {
+  switch (state) {
+    case 'greeting': return 'Listening…';
+    case 'location': return 'Tuning to your region…';
+    case 'income':   return 'Calibrating to your comfort…';
+    case 'risk':     return 'Building your secure account…';
+    case 'wallet':   return 'Almost ready…';
+    case 'intent':   return 'All set — what would you like to do first?';
+    case 'done':     return 'Welcome.';
+    default:         return 'Working…';
+  }
 }
