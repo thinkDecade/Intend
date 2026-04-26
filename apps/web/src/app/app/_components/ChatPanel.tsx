@@ -37,15 +37,48 @@ interface Message {
   ts?:        number;
 }
 
-// Quick-action chips. One canonical list used in BOTH the empty state and
-// after the conversation starts — so the user doesn't see them visually
-// re-shape the moment they send their first message. Ordered deposit-first
-// (how money enters the system), then SEND / CONVERT / ALLOCATE per spec.
+// Suggestion chips aligned with the four Intend primitives (Store/Send/Convert/Allocate)
 const ACTION_CHIPS = [
-  { label: 'Add funds', message: 'I want to add funds to my account'        },
-  { label: 'Send',      message: 'I want to send money to someone'          },
-  { label: 'Convert',   message: 'I want to convert one asset into another' },
-  { label: 'Grow',      message: 'I want to put my idle money to work'      },
+  {
+    label: 'Store idle balance safely',
+    message: 'I want to store my idle USDC safely',
+    kind: 'store',
+    icon: (
+      <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3L20 6V13C20 17 16 20 12 21C8 20 4 17 4 13V6Z"/>
+      </svg>
+    ),
+  },
+  {
+    label: 'Convert crypto to stable',
+    message: 'I want to convert 1 ETH to USDC',
+    kind: 'convert',
+    icon: (
+      <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 8H18L15 5M20 16H6L9 19"/>
+      </svg>
+    ),
+  },
+  {
+    label: 'Send money to someone',
+    message: 'I want to send $50 to someone',
+    kind: 'send',
+    icon: (
+      <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12L21 4L13 21L11 13Z"/>
+      </svg>
+    ),
+  },
+  {
+    label: 'Allocate idle capital to yield',
+    message: 'I want to put my idle money to work earning yield',
+    kind: 'allocate',
+    icon: (
+      <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 17L8 10L12 14L16 7L21 12"/>
+      </svg>
+    ),
+  },
 ];
 
 const STORAGE_KEY            = 'intend:chat_messages';
@@ -316,28 +349,34 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
   const isEmpty = messages.length === 0;
   const canSend = !!input.trim() && !isStreaming && !!userId;
 
+  const now = new Date();
+  const sessionLabel = `Session · ${now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} · ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} UTC`;
+
   return (
     <>
-      {/* Background grid overlay */}
-      <div className="chat-grid-overlay" aria-hidden="true" />
+      {/* Concierge masthead header */}
+      <div className="concierge-header">
+        <div className="concierge-masthead-mark">i</div>
+        <div>
+          <div className="concierge-masthead-title">Intend <em>Concierge</em></div>
+          <div className="concierge-masthead-sub">Your money, executing your intentions.</div>
+        </div>
+        <div className="concierge-header-meta">{sessionLabel}</div>
+      </div>
 
       {/* Messages */}
       <div className="messages scrollbar-hide">
         {isEmpty ? (
-          <EmptyState onSuggest={label => void sendMessage(label)} />
+          <EmptyState />
         ) : (
           messages.map((msg, i) => {
             const prev = messages[i - 1];
             const next = messages[i + 1];
-            // iMessage grouping: collapse the gap & hide tail when the next bubble
-            // is from the same sender within ~2 minutes.
             const TWO_MIN = 2 * 60 * 1000;
             const isFirstInGroup = !prev || prev.role !== msg.role
               || ((msg.ts ?? 0) - (prev.ts ?? 0) > TWO_MIN);
             const isLastInGroup  = !next || next.role !== msg.role
               || ((next.ts ?? 0) - (msg.ts ?? 0) > TWO_MIN);
-            // Show timestamp separator only when there's a meaningful break
-            // (>5 min) between the previous bubble and this one.
             const FIVE_MIN = 5 * 60 * 1000;
             const showTimeSeparator = !prev
               || ((msg.ts ?? 0) - (prev.ts ?? 0) > FIVE_MIN);
@@ -364,59 +403,60 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
         <div ref={bottomRef} />
       </div>
 
-      {/* Input area */}
-      <div className="input-area">
-        <div className="action-chips">
-          {ACTION_CHIPS.map(a => (
-            <button
-              key={a.label}
-              className="action-chip"
-              disabled={isStreaming}
-              onClick={() => void sendMessage(a.message)}
-            >
-              {a.label}
-            </button>
-          ))}
-          {!isEmpty && (
-            <button
-              className="action-chip action-chip--clear"
-              disabled={isStreaming}
-              onClick={() => {
-                setMessages([]);
-                sessionStorage.removeItem(STORAGE_KEY);
-              }}
-              title="Clear conversation"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+      {/* Suggestion chips — shown always for quick actions */}
+      <div className="concierge-chips">
+        {ACTION_CHIPS.map(a => (
+          <button
+            key={a.label}
+            className={`concierge-chip concierge-chip--${a.kind}`}
+            disabled={isStreaming}
+            onClick={() => void sendMessage(a.message)}
+          >
+            {a.icon}
+            <span>{a.label}</span>
+          </button>
+        ))}
+        {!isEmpty && (
+          <button
+            className="concierge-chip"
+            disabled={isStreaming}
+            onClick={() => {
+              setMessages([]);
+              sessionStorage.removeItem(STORAGE_KEY);
+            }}
+            title="Clear conversation"
+            style={{ opacity: 0.65 }}
+          >
+            <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+            </svg>
+            <span>Clear</span>
+          </button>
+        )}
+      </div>
 
-        <div className="input-bar">
-          {/* intend:// prefix */}
-          <span className="input-prefix">
-            <span className="input-prefix-intend">intend</span>
-            <span className="input-prefix-sep">://</span>
-          </span>
+      {/* Composer */}
+      <div className="concierge-composer-wrap">
+        <div className="concierge-composer">
+          <span className="concierge-prefix">Intent ↦</span>
           <textarea
             ref={inputRef}
-            className="input-field"
+            className="concierge-input"
             value={input}
             rows={1}
-            placeholder="What would you like your money to do?"
+            placeholder={isStreaming ? 'Concierge is working…' : 'Tell me what you\'d like your money to do'}
             disabled={isStreaming || !userId}
             onChange={e => { setInput(e.target.value); autoResize(e.target); }}
             onKeyDown={handleKeyDown}
           />
           <button
-            className="send-btn"
+            className="concierge-send"
             disabled={!canSend}
             onClick={() => void sendMessage()}
             aria-label="Send"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12L21 4L13 21L11 13Z"/>
             </svg>
           </button>
         </div>
@@ -427,13 +467,12 @@ export default function ChatPanel({ userId, isOnboarding }: { userId: string | n
 
 // ── Empty state ────────────────────────────────────────────────────────────
 
-function EmptyState({ onSuggest }: { onSuggest: (label: string) => void }) {
-  void onSuggest;
+function EmptyState() {
   return (
-    <div className="chat-empty">
-      <div className="chat-empty-logo">i</div>
-      <div className="chat-empty-heading">Intend Concierge</div>
-      <div className="chat-empty-tagline">Your money, executing your intentions.</div>
+    <div className="concierge-empty">
+      <div className="concierge-empty-mark">i</div>
+      <div className="concierge-empty-title">Good day.</div>
+      <div className="concierge-empty-sub">Your money, executing your intentions.</div>
     </div>
   );
 }
@@ -661,7 +700,16 @@ function TypingCursor() {
   );
 }
 
-// ── Preview card ───────────────────────────────────────────────────────────
+// ── Preview card (plan confirmation) — Concierge stamp + field grid style ──
+
+function primitiveKind(primitive: string): string {
+  const p = primitive.toLowerCase();
+  if (p.includes('store') || p.includes('protect') || p.includes('hedge')) return 'store';
+  if (p.includes('convert') || p.includes('swap'))  return 'convert';
+  if (p.includes('send') || p.includes('move') || p.includes('transfer')) return 'send';
+  if (p.includes('allocate') || p.includes('grow') || p.includes('yield') || p.includes('earn')) return 'allocate';
+  return 'store';
+}
 
 function PreviewCard({
   plan,
@@ -678,59 +726,67 @@ function PreviewCard({
 }) {
   const isLarge = plan.amount_usd > 500;
   const [step, setStep] = useState<'initial' | 'confirm'>(isLarge ? 'initial' : 'confirm');
+  const kind = primitiveKind(plan.primitive);
 
   return (
-    <div className="preview-card">
-      <div className="preview-header">
-        <span className="preview-label">Execution plan</span>
-        <span className="preview-status">Ready</span>
+    <div className="plan-card">
+      <div className="plan-card-head">
+        <span className={`stamp ${kind}`}>{kind}</span>
+        <div className="plan-card-headline">
+          {plan.description || `Execute ${plan.primitive}`}
+        </div>
+        <span className="plan-card-status">Draft</span>
       </div>
 
-      <div className="preview-body">
-        <div className="preview-outcome">
-          {plan.description || (
-            <>Move <span>${plan.amount_usd.toLocaleString()}</span></>
-          )}
+      <div className="plan-card-fields">
+        <div className="plan-field">
+          <div className="plan-field-k">Primitive</div>
+          <div className="plan-field-v mono">{plan.primitive}</div>
         </div>
-
-        <div className="preview-rows">
-          <div className="preview-row">
-            <span className="preview-row-label">Primitive</span>
-            <span className="preview-row-val muted">{plan.primitive}</span>
+        <div className="plan-field">
+          <div className="plan-field-k">Amount</div>
+          <div className="plan-field-v mono">${plan.amount_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+        </div>
+        <div className="plan-field">
+          <div className="plan-field-k">Fees</div>
+          <div className="plan-field-v mono" style={{ color: 'var(--sage, var(--green))' }}>
+            {plan.fees_total === 0 ? '$0.00' : `$${plan.fees_total.toFixed(2)}`}
           </div>
-          <div className="preview-row">
-            <span className="preview-row-label">Amount</span>
-            <span className="preview-row-val">${plan.amount_usd.toLocaleString()}</span>
-          </div>
-          <div className="preview-row">
-            <span className="preview-row-label">Fees</span>
-            <span className="preview-row-val good">
-              {plan.fees_total === 0 ? '$0 (none)' : `$${plan.fees_total.toFixed(2)}`}
-            </span>
-          </div>
+        </div>
+        <div className="plan-field">
+          <div className="plan-field-k">Network</div>
+          <div className="plan-field-v mono">Base</div>
         </div>
       </div>
 
-      <div className="preview-actions">
+      <div className="plan-card-actions">
         {step === 'initial' ? (
           <>
-            <button className="btn-confirm" onClick={() => setStep('confirm')}>
-              Review →
+            <button className="plan-btn primary" onClick={() => setStep('confirm')}>
+              Review
+              <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12H19M14 7L19 12L14 17"/>
+              </svg>
             </button>
-            <button className="btn-cancel" disabled={isBusy} onClick={() => onCancel(plan.intent_id, msgId)}>
+            <button className="plan-btn ghost" disabled={isBusy} onClick={() => onCancel(plan.intent_id, msgId)}>
               Cancel
             </button>
           </>
         ) : (
           <>
             <button
-              className="btn-confirm"
+              className="plan-btn primary"
               disabled={isBusy}
               onClick={() => onConfirm(plan.intent_id, msgId)}
             >
-              {isBusy ? 'Executing…' : isLarge ? `Confirm $${plan.amount_usd.toLocaleString()}` : 'Confirm'}
+              {isBusy ? 'Executing…' : isLarge ? `Execute $${plan.amount_usd.toLocaleString()}` : 'Execute'}
+              {!isBusy && (
+                <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12H19M14 7L19 12L14 17"/>
+                </svg>
+              )}
             </button>
-            <button className="btn-cancel" disabled={isBusy} onClick={() => onCancel(plan.intent_id, msgId)}>
+            <button className="plan-btn ghost" disabled={isBusy} onClick={() => onCancel(plan.intent_id, msgId)}>
               Cancel
             </button>
           </>

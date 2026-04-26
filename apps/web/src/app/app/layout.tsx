@@ -7,7 +7,7 @@ import AppShell from './_components/AppShell';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const supabase    = createClient(cookieStore);
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
 
   if (!user) redirect('/login');
 

@@ -1,4 +1,4 @@
-import { Outfit, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
+import { Outfit, Plus_Jakarta_Sans, JetBrains_Mono, Fraunces } from 'next/font/google';
 
 export const display = Outfit({
   subsets: ['latin'],
@@ -20,4 +20,12 @@ export const mono = JetBrains_Mono({
   display: 'swap',
   variable: '--font-mono',
   weight: ['100', '200', '300', '400', '500', '600', '700', '800'],
+});
+
+export const serif = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-serif',
+  weight: ['300', '400', '500', '600', '700'],
+  style: ['normal', 'italic'],
 });

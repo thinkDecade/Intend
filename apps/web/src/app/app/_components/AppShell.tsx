@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import NavPanel from './NavPanel';
-import RealityPanel from './RightPanel';
+import RightPanel, { SignalsContent, MOBILE_SIGNALS } from './RightPanel';
 
 export default function AppShell({
   children,
@@ -16,11 +16,13 @@ export default function AppShell({
   displayName:  string | null;
   isOnboarding: boolean;
 }) {
-  // New users see the reality panel immediately so they know it exists
-  const [showReality, setShowReality] = useState(isOnboarding);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [panelOpen, setPanelOpen]   = useState(isOnboarding);
+  const [panelPeek, setPanelPeek]   = useState(false);
+  const panelOpenRef = useRef(isOnboarding);
+  useEffect(() => { panelOpenRef.current = panelOpen; }, [panelOpen]);
+  const [theme, setTheme]           = useState<'light' | 'dark'>('light');
   const [mobileDrawer, setMobileDrawer] = useState<null | 'nav' | 'reality'>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile]     = useState(false);
 
   // Track viewport width so we can short-circuit desktop-only behaviour on mobile
   useEffect(() => {
@@ -47,17 +49,15 @@ export default function AppShell({
     localStorage.setItem('intend-theme', theme);
   }, [theme]);
 
-  // Mouse edge detection — show reality panel on right edge hover (desktop only)
-  useEffect(() => {
-    if (isMobile) return;
-    const handleMouseMove = (e: MouseEvent) => {
-      if (e.clientX >= window.innerWidth - 10 && !showReality) {
-        setShowReality(true);
-      }
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [showReality, isMobile]);
+  const handlePanelOpen      = useCallback(() => { setPanelOpen(true); setPanelPeek(false); }, []);
+  const handlePanelDismiss   = useCallback(() => { setPanelOpen(false); setPanelPeek(false); }, []);
+  const handlePanelPeekEnd   = useCallback(() => setPanelPeek(false), []);
+  const handleNewSignal      = useCallback(() => {
+    if (!panelOpenRef.current) {
+      setPanelOpen(true);
+      setPanelPeek(true);
+    }
+  }, []);
 
   // Pre-warm the wallet so the first chat reply already knows the address.
   // Fire-and-forget — never blocks the render. The /api/wallet/ensure endpoint
@@ -76,7 +76,7 @@ export default function AppShell({
   }, [mobileDrawer]);
 
   return (
-    <div className="app-shell-outer">
+    <div className={`app-shell-outer${panelOpen && !isMobile ? ' signals-open' : ''}`}>
       {/* Mobile top bar — only visible on small screens */}
       <header className="app-mobile-bar" aria-hidden={!isMobile}>
         <button
@@ -115,21 +115,17 @@ export default function AppShell({
         {children}
       </main>
 
-      {/* Right reality panel (desktop) — slide in/out */}
-      <AnimatePresence>
-        {showReality && !isMobile && (
-          <motion.div
-            key="reality-panel"
-            initial={{ x: 340, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 340, opacity: 0 }}
-            transition={{ type: 'spring', damping: 30, stiffness: 200 }}
-            className="app-shell-right"
-          >
-            <RealityPanel userId={userId} displayName={displayName} open={true} onDismiss={() => setShowReality(false)} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Right intelligence panel (desktop) — CSS transition + hotzone */}
+      {!isMobile && (
+        <RightPanel
+          open={panelOpen}
+          peek={panelPeek}
+          onOpen={handlePanelOpen}
+          onDismiss={handlePanelDismiss}
+          onPeekEnd={handlePanelPeekEnd}
+          onNewSignal={handleNewSignal}
+        />
+      )}
 
       {/* Mobile drawer overlay */}
       <AnimatePresence>
@@ -167,8 +163,8 @@ export default function AppShell({
                   <NavPanel theme={theme} setTheme={setTheme} />
                 </div>
               ) : (
-                <div className="app-drawer-content app-drawer-content--reality">
-                  <RealityPanel userId={userId} displayName={displayName} open={true} onDismiss={() => setMobileDrawer(null)} />
+                <div className="app-drawer-content app-drawer-content--reality" style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
+                  <SignalsContent signals={MOBILE_SIGNALS} onDismiss={() => setMobileDrawer(null)} />
                 </div>
               )}
             </motion.aside>

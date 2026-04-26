@@ -41,6 +41,16 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    href: '/app/intelligence',
+    label: 'INTELLIGENCE',
+    exact: false,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <path d="M3 17L8 10L12 14L16 7L21 12"/>
+      </svg>
+    ),
+  },
 ];
 
 function SunIcon() {

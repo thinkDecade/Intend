@@ -1,13 +1,18 @@
 import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server';
 import { getUserByEmail, createUser, listPasskeys, getERP } from '@intend/data';
+import dynamic from 'next/dynamic';
 import ChatPanel from './_components/ChatPanel';
-import { PasskeyNudge } from './_components/PasskeyNudge';
+
+const PasskeyNudge = dynamic(
+  () => import('./_components/PasskeyNudge').then(m => ({ default: m.PasskeyNudge })),
+  { ssr: false }
+);
 
 export default async function AppPage() {
   const cookieStore = await cookies();
   const supabase    = createClient(cookieStore);
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
 
   let userId: string | null = null;
   let isOnboarding = false;
